@@ -29,6 +29,8 @@ jwt:
   secret: X7k9pL2mQ4jR8vT6yB3nF1cD5hG9jL4kP8mQ2vT6yB3nF1cD5h
   expiration: 60
 logging:
+  file:
+    name: logs/nexsplit.log
   level:
     com.nexsplit: DEBUG
     org.springframework.security: DEBUG

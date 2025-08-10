@@ -3,6 +3,7 @@ package com.nexsplit.expense.util;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -13,6 +14,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Date;
 
 @Component
+@Slf4j
 public class JwtUtil {
     private final SecretKey secretKey;
     private final int expirationMinutes;
@@ -21,16 +23,25 @@ public class JwtUtil {
         if (secret == null || secret.length() < 32) {
             throw new IllegalArgumentException("JWT secret must be at least 32 characters long for HS256");
         }
-        this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8)); // using a standard charset for consistency of encoding
+        this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.expirationMinutes = expirationMinutes;
     }
 
-    public String generateToken(String email, String role) {
+    public String generateAccessToken(String email, String role) {
         return Jwts.builder()
                 .subject(email)
                 .claim("role", role)
                 .issuedAt(Date.from(Instant.now()))
-                .expiration(Date.from(Instant.now().plus(expirationMinutes, ChronoUnit.MINUTES))) // 1 hour
+                .expiration(Date.from(Instant.now().plus(expirationMinutes, ChronoUnit.MINUTES)))
+                .signWith(secretKey)
+                .compact();
+    }
+
+    public String generateRefreshToken(String email) {
+        return Jwts.builder()
+                .subject(email)
+                .issuedAt(Date.from(Instant.now()))
+                .expiration(Date.from(Instant.now().plus(7, ChronoUnit.DAYS)))
                 .signWith(secretKey)
                 .compact();
     }
@@ -49,7 +60,7 @@ public class JwtUtil {
             return true;
         } catch (io.jsonwebtoken.security.SignatureException | io.jsonwebtoken.MalformedJwtException |
                  io.jsonwebtoken.ExpiredJwtException | IllegalArgumentException e) {
-            System.err.println("Token validation failed: " + e.getMessage());
+            log.error("Token validation failed: {}", e.getMessage());
             return false;
         }
     }

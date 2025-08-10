@@ -5,10 +5,10 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
@@ -18,49 +18,46 @@ import java.io.IOException;
 import java.util.Collections;
 
 @Component
+@RequiredArgsConstructor
 public class JwtFilter extends OncePerRequestFilter {
-
     private static final Logger logger = LoggerFactory.getLogger(JwtFilter.class);
     private final JwtUtil jwtUtil;
 
-    public JwtFilter(JwtUtil jwtUtil) {
-        this.jwtUtil = jwtUtil;
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
+        String path = request.getRequestURI();
+        return path.startsWith(ApiConfig.API_BASE_PATH + "/auth/") || path.startsWith("/login/oauth2/code/") || path.startsWith("/swagger-ui/index.html");
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-
         String authHeader = request.getHeader("Authorization");
 
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String token = authHeader.substring(7);
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            logger.debug("No valid Authorization header found for path: {}", request.getRequestURI());
+            chain.doFilter(request, response); // Continue without setting 401
+            return;
+        }
 
-            logger.debug("JWT token found in request: {}", token.substring(0, Math.min(10, token.length())) + "...");
+        String token = authHeader.substring(7);
+        logger.debug("Processing JWT token: {}", token.substring(0, Math.min(10, token.length())) + "...");
 
-            if (jwtUtil.validateToken(token)) {
-                if (SecurityContextHolder.getContext().getAuthentication() == null) {
-                    String email = jwtUtil.getEmailFromToken(token);
-                    String role = jwtUtil.getRoleFromToken(token);
-
-                    logger.info("Authenticated user '{}' with role '{}'", email, role);
-
-                    UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
-                            email,
-                            null,
-                            Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role))
-                    );
-                    auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(auth);
-                } else {
-                    logger.debug("SecurityContext already contains authentication, skipping.");
-                }
-            } else {
-                logger.warn("Invalid or expired JWT token received");
-                response.addHeader("WWW-Authenticate", "Bearer error=\"invalid_token\"");
+        if (jwtUtil.validateToken(token)) {
+            if (SecurityContextHolder.getContext().getAuthentication() == null) {
+                String email = jwtUtil.getEmailFromToken(token);
+                String role = jwtUtil.getRoleFromToken(token);
+                UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
+                        email, null, Collections.singletonList(() -> "ROLE_" + role));
+                auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(auth);
+                logger.info("Authenticated user: {} with role: {}", email, role);
             }
         } else {
-            logger.debug("No valid Authorization header found");
+            logger.warn("Invalid or expired JWT token");
+            response.setHeader("WWW-Authenticate", "Bearer error=\"invalid_token\"");
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid JWT token");
+            return;
         }
 
         chain.doFilter(request, response);
