@@ -2,8 +2,7 @@ package com.nexsplit.service;
 
 import com.nexsplit.dto.user.UserProfileDto;
 import com.nexsplit.exception.UserNotFoundException;
-import com.nexsplit.exception.UserUnauthorizedException;
-import com.nexsplit.mapper.UserMapperRegistry;
+import com.nexsplit.mapper.user.UserMapperRegistry;
 import com.nexsplit.model.User;
 import com.nexsplit.repository.UserRepository;
 import com.nexsplit.util.JwtUtil;

@@ -3,7 +3,7 @@ package com.nexsplit.service;
 import com.nexsplit.dto.user.UserProfileDto;
 import com.nexsplit.exception.UserNotFoundException;
 import com.nexsplit.exception.UserUnauthorizedException;
-import com.nexsplit.mapper.UserMapperRegistry;
+import com.nexsplit.mapper.user.UserMapperRegistry;
 import com.nexsplit.model.User;
 import com.nexsplit.repository.UserRepository;
 import com.nexsplit.util.JwtUtil;
@@ -125,7 +125,7 @@ public class UserService {
         return jwtUtil.generateAccessToken(email, "USER");
     }
 
-    // User Profile Management
+
     public UserProfileDto getUserProfile(String email) {
         User user = userRepository.findActiveUserByEmail(email)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
@@ -175,20 +175,21 @@ public class UserService {
         User user = userRepository.findActiveUserByEmail(email)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
 
-        // Generate reset token (simple implementation - in production, use proper token
-        // generation)
+        /* Generate reset token (simple implementation - in production, use proper token
+            generation)
+        */
         int resetToken = (int) (Math.random() * 900000) + 100000; // 6-digit number
         user.setLastValidationCode(resetToken);
         userRepository.save(user);
 
         // TODO: Send email with reset token
-        // For now, just log it
+        // just logging for now
         System.out.println("Password reset token for " + email + ": " + resetToken);
     }
 
     @Transactional
     public void resetPassword(String resetToken, String newPassword) {
-        // Find user by reset token (simple implementation)
+        // Find user by reset token
         int tokenValue;
         try {
             tokenValue = Integer.parseInt(resetToken);

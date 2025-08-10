@@ -1,7 +1,9 @@
 package com.nexsplit.controller;
 
 import com.nexsplit.config.ApiConfig;
-import com.nexsplit.dto.user.*;
+import com.nexsplit.dto.auth.*;
+import com.nexsplit.dto.user.UpdateUserDto;
+import com.nexsplit.dto.user.UserProfileDto;
 import com.nexsplit.model.ApiResponse;
 import com.nexsplit.service.UserService;
 import jakarta.validation.Valid;

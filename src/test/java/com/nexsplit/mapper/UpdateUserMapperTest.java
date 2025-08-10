@@ -1,6 +1,7 @@
 package com.nexsplit.mapper;
 
 import com.nexsplit.dto.user.UpdateUserDto;
+import com.nexsplit.mapper.user.UpdateUserMapper;
 import com.nexsplit.model.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

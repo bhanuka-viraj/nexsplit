@@ -1,7 +1,7 @@
 package com.nexsplit.controller;
 
-import com.nexsplit.dto.user.AuthResponse;
-import com.nexsplit.dto.user.LoginRequest;
+import com.nexsplit.dto.auth.AuthResponse;
+import com.nexsplit.dto.auth.LoginRequest;
 import com.nexsplit.dto.user.UserDto;
 import com.nexsplit.model.User;
 import com.nexsplit.service.UserService;

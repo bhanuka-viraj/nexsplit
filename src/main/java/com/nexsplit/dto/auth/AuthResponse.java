@@ -1,4 +1,4 @@
-package com.nexsplit.dto.user;
+package com.nexsplit.dto.auth;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

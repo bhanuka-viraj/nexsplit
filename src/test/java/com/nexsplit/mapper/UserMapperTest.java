@@ -1,12 +1,12 @@
 package com.nexsplit.mapper;
 
 import com.nexsplit.dto.user.UserDto;
+import com.nexsplit.mapper.user.UserMapper;
 import com.nexsplit.model.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 

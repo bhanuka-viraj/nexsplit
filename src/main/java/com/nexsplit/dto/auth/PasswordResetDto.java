@@ -1,4 +1,4 @@
-package com.nexsplit.dto.user;
+package com.nexsplit.dto.auth;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;

@@ -1,4 +1,4 @@
-package com.nexsplit.mapper;
+package com.nexsplit.mapper.user;
 
 import com.nexsplit.dto.user.UserProfileDto;
 import com.nexsplit.model.User;
