@@ -16,7 +16,7 @@ public class LoggingAspect {
     private static final Logger logger = LoggerFactory.getLogger(LoggingAspect.class);
 
     // Log method entry for controllers
-    @Before("execution(* com.nexsplit.expense.controller..*(..))")
+    @Before("execution(* com.nexsplit.controller..*(..))")
     public void logControllerEntry(JoinPoint joinPoint) {
         String methodName = joinPoint.getSignature().toShortString();
         Object[] args = joinPoint.getArgs();
@@ -24,14 +24,14 @@ public class LoggingAspect {
     }
 
     // Log method exit for controllers
-    @AfterReturning(pointcut = "execution(* com.nexsplit.expense.controller..*(..))", returning = "result")
+    @AfterReturning(pointcut = "execution(* com.nexsplit.controller..*(..))", returning = "result")
     public void logControllerExit(JoinPoint joinPoint, Object result) {
         String methodName = joinPoint.getSignature().toShortString();
         logger.info("Exiting controller method: {} with result: {}", methodName, result);
     }
 
     // Log execution time for services
-    @Around("execution(* com.nexsplit.expense.service..*(..))")
+    @Around("execution(* com.nexsplit.service..*(..))")
     public Object logServiceExecutionTime(ProceedingJoinPoint joinPoint) throws Throwable {
         long startTime = System.currentTimeMillis();
         String methodName = joinPoint.getSignature().toShortString();

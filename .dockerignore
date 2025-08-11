@@ -1,0 +1,83 @@
+# ========================================
+# DOCKER IGNORE FILE
+# ========================================
+# This file tells Docker which files/directories to exclude from the build context
+# Excluding unnecessary files improves build performance and reduces image size
+
+# ========================================
+# VERSION CONTROL FILES
+# ========================================
+# Git repository files - not needed in the container
+.git
+.gitignore
+.gitattributes
+
+# ========================================
+# IDE AND EDITOR FILES
+# ========================================
+# IDE-specific files that are not needed for the application
+.idea
+.vscode
+*.iml
+
+# ========================================
+# BUILD ARTIFACTS
+# ========================================
+# Maven build output - we'll build fresh in the container
+target/
+# Exception: Keep the final JAR file for potential use
+!target/*.jar
+
+# ========================================
+# LOG FILES
+# ========================================
+# Application logs - will be generated in the container
+logs/
+*.log
+
+# ========================================
+# OPERATING SYSTEM FILES
+# ========================================
+# OS-specific files that shouldn't be in the container
+.DS_Store          # macOS
+Thumbs.db          # Windows
+
+# ========================================
+# DOCKER FILES
+# ========================================
+# Docker-related files - not needed inside the container
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# ========================================
+# DOCUMENTATION FILES
+# ========================================
+# Documentation - not needed for the application runtime
+README.md
+HELP.md
+LICENSE
+
+# ========================================
+# TEST FILES
+# ========================================
+# Test source code - not needed in production container
+src/test/
+
+# ========================================
+# TEMPORARY FILES
+# ========================================
+# Various temporary and backup files
+*.tmp
+*.temp
+*.swp              # Vim swap files
+*.swo              # Vim swap files
+*~                 # Backup files (tilde suffix)
+
+# ========================================
+# ENVIRONMENT FILES
+# ========================================
+# Environment configuration files - should be provided at runtime
+.env
+.env.local
+.env.production

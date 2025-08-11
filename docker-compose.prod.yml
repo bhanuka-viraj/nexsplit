@@ -1,0 +1,94 @@
+# ========================================
+# DOCKER COMPOSE - PRODUCTION ENVIRONMENT
+# ========================================
+# This file defines the production environment using DockerHub image
+# Use this for production deployment with external database
+
+version: "3.8"
+
+services:
+  # ========================================
+  # NEXSPLIT APPLICATION SERVICE (PRODUCTION)
+  # ========================================
+  # The main Spring Boot application for production
+  nexsplit-app:
+    # Use pre-built image from DockerHub
+    # Format: username/repository:tag
+    image: bhanukaviraj/nexsplit:latest
+    # Container name for production
+    container_name: nexsplit-app-prod
+    # Environment variables for production configuration
+    environment:
+      # ========================================
+      # DATABASE CONFIGURATION
+      # ========================================
+      # Connect to external PostgreSQL database
+      # These MUST be provided via environment variables in production
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+
+      # ========================================
+      # JWT CONFIGURATION
+      # ========================================
+      # JWT secret key for token generation and validation
+      # MUST be provided via environment variable in production
+      JWT_SECRET: ${JWT_SECRET}
+      # JWT token expiration time in minutes
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-3600}
+
+      # ========================================
+      # OAUTH2 CONFIGURATION
+      # ========================================
+      # Google OAuth2 credentials for social login
+      # These MUST be provided via environment variables in production
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+
+      # ========================================
+      # APPLICATION CONFIGURATION
+      # ========================================
+      # Spring profile for production environment
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-production}
+    # Port mapping: host_port:container_port
+    ports:
+      - "8080:8080" # Expose application port
+    # Network configuration
+    networks:
+      - nexsplit-network # Custom network for service communication
+    # Volume mappings for production
+    volumes:
+      - nexsplit_logs:/app/logs # Named volume for log persistence
+    # Restart policy for production reliability
+    restart: unless-stopped # Restart unless manually stopped
+    # Health check configuration for production monitoring
+    healthcheck:
+      # Command to check if application is healthy
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/actuator/health",
+        ]
+      interval: 30s # Check every 30 seconds
+      timeout: 10s # Wait 10 seconds for response
+      retries: 3 # Mark unhealthy after 3 failed attempts
+      start_period: 60s # Wait 60 seconds before first check (app startup time)
+
+# ========================================
+# VOLUMES
+# ========================================
+# Named volumes for production data persistence
+volumes:
+  nexsplit_logs: # Application logs volume
+
+# ========================================
+# NETWORKS
+# ========================================
+# Custom network for service communication
+networks:
+  nexsplit-network:
+    driver: bridge # Default bridge network driver

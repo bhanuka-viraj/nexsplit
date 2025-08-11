@@ -175,9 +175,7 @@ public class UserService {
         User user = userRepository.findActiveUserByEmail(email)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
 
-        /* Generate reset token (simple implementation - in production, use proper token
-            generation)
-        */
+        // Generate reset token
         int resetToken = (int) (Math.random() * 900000) + 100000; // 6-digit number
         user.setLastValidationCode(resetToken);
         userRepository.save(user);

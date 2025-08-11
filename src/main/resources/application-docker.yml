@@ -1,0 +1,136 @@
+# ========================================
+# SPRING BOOT CONFIGURATION - DOCKER PROFILE
+# ========================================
+# This configuration is used when running the application in Docker containers
+# It uses environment variables for flexible configuration across environments
+
+# ========================================
+# DATABASE CONFIGURATION
+# ========================================
+spring:
+  datasource:
+    # Database connection URL with environment variable support
+    # Format: jdbc:postgresql://host:port/database
+    url: ${SPRING_DATASOURCE_URL}
+    # Database username with environment variable support
+    username: ${SPRING_DATASOURCE_USERNAME}
+    # Database password with environment variable support
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    # PostgreSQL JDBC driver class
+    driver-class-name: org.postgresql.Driver
+
+  # ========================================
+  # JPA CONFIGURATION
+  # ========================================
+  jpa:
+    hibernate:
+      # Disable automatic schema generation - use Flyway migrations instead
+      ddl-auto: none
+    properties:
+      hibernate:
+        # PostgreSQL dialect for Hibernate
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # ========================================
+  # FLYWAY MIGRATION CONFIGURATION
+  # ========================================
+  flyway:
+    # Location of migration scripts
+    locations: classpath:db/migration
+    # Automatically baseline existing database
+    baseline-on-migrate: true
+
+  # ========================================
+  # OAUTH2 SECURITY CONFIGURATION
+  # ========================================
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            # Google OAuth2 client ID from environment variable
+            client-id: ${GOOGLE_CLIENT_ID}
+            # Google OAuth2 client secret from environment variable
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            # OAuth2 scopes for user profile and email
+            scope: profile,email
+            # OAuth2 redirect URI with environment variable support
+            redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8080/login/oauth2/code/google}
+        provider:
+          google:
+            # Google OAuth2 authorization endpoint
+            authorization-uri: https://accounts.google.com/o/oauth2/auth
+            # Google OAuth2 token endpoint
+            token-uri: https://oauth2.googleapis.com/token
+            # Google OAuth2 user info endpoint
+            user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
+            # User attribute to use as username
+            user-name-attribute: email
+
+# ========================================
+# SERVER CONFIGURATION
+# ========================================
+server:
+  # Application port (exposed in Docker container)
+  port: 8080
+
+# ========================================
+# JWT CONFIGURATION
+# ========================================
+jwt:
+  # JWT secret key for token signing and validation
+  # MUST be provided via environment variable
+  secret: ${JWT_SECRET}
+  # JWT token expiration time in minutes
+  expiration: ${JWT_EXPIRATION:3600}
+
+# ========================================
+# LOGGING CONFIGURATION
+# ========================================
+logging:
+  file:
+    # Log file path inside Docker container
+    name: /app/logs/nexsplit.log
+  level:
+    # Application-specific logging level
+    com.nexsplit: INFO
+    # Spring Security logging level
+    org.springframework.security: INFO
+
+# ========================================
+# CORS CONFIGURATION
+# ========================================
+# Cross-Origin Resource Sharing settings for web frontend
+app:
+  cors:
+    # Allow credentials (cookies, authorization headers)
+    allow-credentials: true
+    # Allowed origins for CORS requests
+    allowed-origins:
+      - http://localhost:3000 # Local development frontend
+      - http://127.0.0.1:3000 # Alternative local frontend
+      - ${FRONTEND_URL:http://localhost:3000} # Production frontend URL
+    # Allowed HTTP methods
+    allowed-methods:
+      - GET
+      - POST
+      - PUT
+      - PATCH
+      - DELETE
+      - OPTIONS
+    # Allowed HTTP headers
+    allowed-headers:
+      - Authorization # JWT token header
+      - Origin # Origin header
+      - Content-Type # Content type header
+      - Accept # Accept header
+      - Accept-Encoding # Accept encoding header
+      - Accept-Language # Accept language header
+      - Access-Control-Allow-Origin # CORS header
+      - Access-Control-Allow-Headers # CORS header
+      - Access-Control-Request-Method # CORS header
+      - X-Requested-With # AJAX request header
+      - X-Auth-Token # Custom auth header
+      - X-Xsrf-Token # CSRF protection header
+      - Cache-Control # Cache control header
+      - Id-Token # OAuth2 ID token header
