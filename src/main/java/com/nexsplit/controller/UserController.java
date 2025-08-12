@@ -1,7 +1,12 @@
 package com.nexsplit.controller;
 
 import com.nexsplit.config.ApiConfig;
-import com.nexsplit.dto.auth.*;
+import com.nexsplit.dto.auth.AuthResponse;
+import com.nexsplit.dto.auth.ChangePasswordDto;
+import com.nexsplit.dto.auth.PasswordResetDto;
+import com.nexsplit.dto.auth.PasswordResetRequestDto;
+import com.nexsplit.dto.auth.PasswordValidationRequest;
+import com.nexsplit.dto.auth.PasswordValidationResponse;
 import com.nexsplit.dto.user.UpdateUserDto;
 import com.nexsplit.dto.user.UserProfileDto;
 import com.nexsplit.model.ApiResponse;
@@ -149,10 +154,14 @@ public class UserController {
     }
 
     @PostMapping("/validate/password")
-    public ResponseEntity<Map<String, Object>> validatePassword(@RequestBody Map<String, String> request) {
-        String password = request.get("password");
-        boolean isValid = userService.validatePasswordStrength(password);
+    @Operation(summary = "Validate Password Strength", description = "Validate if a password meets strength requirements")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Password validation result", content = {
+            @Content(mediaType = "application/json", schema = @Schema(implementation = PasswordValidationResponse.class))
+    })
+    public ResponseEntity<PasswordValidationResponse> validatePassword(
+            @Valid @RequestBody PasswordValidationRequest request) {
+        boolean isValid = userService.validatePasswordStrength(request.getPassword());
         String message = isValid ? "Strong password" : "Password is not strong enough";
-        return ResponseEntity.ok(Map.of("valid", isValid, "message", message));
+        return ResponseEntity.ok(new PasswordValidationResponse(isValid, message));
     }
 }

@@ -17,14 +17,18 @@ import java.util.Date;
 @Slf4j
 public class JwtUtil {
     private final SecretKey secretKey;
-    private final int expirationMinutes;
+    private final int accessTokenExpirationMinutes;
+    private final int refreshTokenExpirationDays;
 
-    public JwtUtil(@Value("${jwt.secret}") String secret, @Value("${jwt.expiration}") int expirationMinutes) {
+    public JwtUtil(@Value("${jwt.secret}") String secret,
+            @Value("${jwt.access-token.expiration-minutes:15}") int accessTokenExpirationMinutes,
+            @Value("${jwt.refresh-token.expiration-days:7}") int refreshTokenExpirationDays) {
         if (secret == null || secret.length() < 32) {
             throw new IllegalArgumentException("JWT secret must be at least 32 characters long for HS256");
         }
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
-        this.expirationMinutes = expirationMinutes;
+        this.accessTokenExpirationMinutes = accessTokenExpirationMinutes;
+        this.refreshTokenExpirationDays = refreshTokenExpirationDays;
     }
 
     public String generateAccessToken(String email, String role) {
@@ -32,7 +36,7 @@ public class JwtUtil {
                 .subject(email)
                 .claim("role", role)
                 .issuedAt(Date.from(Instant.now()))
-                .expiration(Date.from(Instant.now().plus(expirationMinutes, ChronoUnit.MINUTES)))
+                .expiration(Date.from(Instant.now().plus(accessTokenExpirationMinutes, ChronoUnit.MINUTES)))
                 .signWith(secretKey)
                 .compact();
     }
@@ -41,7 +45,7 @@ public class JwtUtil {
         return Jwts.builder()
                 .subject(email)
                 .issuedAt(Date.from(Instant.now()))
-                .expiration(Date.from(Instant.now().plus(7, ChronoUnit.DAYS)))
+                .expiration(Date.from(Instant.now().plus(refreshTokenExpirationDays, ChronoUnit.DAYS)))
                 .signWith(secretKey)
                 .compact();
     }
@@ -58,8 +62,8 @@ public class JwtUtil {
         try {
             parseClaims(token);
             return true;
-        } catch (io.jsonwebtoken.security.SignatureException | io.jsonwebtoken.MalformedJwtException |
-                 io.jsonwebtoken.ExpiredJwtException | IllegalArgumentException e) {
+        } catch (io.jsonwebtoken.security.SignatureException | io.jsonwebtoken.MalformedJwtException
+                | io.jsonwebtoken.ExpiredJwtException | IllegalArgumentException e) {
             log.error("Token validation failed: {}", e.getMessage());
             return false;
         }

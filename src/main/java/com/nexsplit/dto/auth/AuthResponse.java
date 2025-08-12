@@ -16,4 +16,5 @@ public class AuthResponse {
     private Long expiresIn;
     private String email;
     private String fullName;
+    private String error; // For security violation messages
 }

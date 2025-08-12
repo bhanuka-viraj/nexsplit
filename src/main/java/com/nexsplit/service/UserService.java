@@ -125,6 +125,16 @@ public class UserService {
         return jwtUtil.generateAccessToken(email, "USER");
     }
 
+    public String getEmailFromRefreshToken(String refreshToken) {
+        if (!jwtUtil.validateToken(refreshToken)) {
+            throw new UserUnauthorizedException("Invalid refresh token");
+        }
+        return jwtUtil.getEmailFromToken(refreshToken);
+    }
+
+    public User getUserByEmail(String email) {
+        return userRepository.getUserByEmail(email);
+    }
 
     public UserProfileDto getUserProfile(String email) {
         User user = userRepository.findActiveUserByEmail(email)

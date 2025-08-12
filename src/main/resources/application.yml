@@ -34,7 +34,12 @@ server:
 
 jwt:
   secret: ${JWT_SECRET:X7k9pL2mQ4jR8vT6yB3nF1cD5hG9jL4kP8mQ2vT6yB3nF1cD5h} # Use environment variable with fallback
-  expiration: ${JWT_EXPIRATION:60}
+  access-token:
+    expiration-minutes: ${JWT_ACCESS_TOKEN_EXPIRATION:15} # 15 minutes for security
+  refresh-token:
+    expiration-days: ${JWT_REFRESH_TOKEN_EXPIRATION:7} # 7 days with rotation
+    max-family-size: ${JWT_REFRESH_TOKEN_MAX_FAMILY_SIZE:10} # Max tokens per family
+    max-concurrent-sessions: ${JWT_REFRESH_TOKEN_MAX_CONCURRENT_SESSIONS:5} # Max concurrent sessions per user
 
 logging:
   file:

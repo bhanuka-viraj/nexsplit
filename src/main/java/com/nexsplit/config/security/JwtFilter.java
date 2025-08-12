@@ -37,7 +37,9 @@ public class JwtFilter extends OncePerRequestFilter {
                 path.startsWith("/actuator/") ||
                 path.startsWith(ApiConfig.API_BASE_PATH + "/users/validate/") ||
                 path.equals(ApiConfig.API_BASE_PATH + "/users/request-password-reset") ||
-                path.equals(ApiConfig.API_BASE_PATH + "/users/reset-password");
+                path.equals(ApiConfig.API_BASE_PATH + "/users/reset-password") ||
+                path.equals(ApiConfig.API_BASE_PATH + "/auth/refresh") ||
+                path.equals(ApiConfig.API_BASE_PATH + "/auth/refresh-token");
     }
 
     @Override
