@@ -20,8 +20,13 @@ target/
 *.ipr
 *.java~
 *.sql~
+# Log files
 *.log
+*.log.*
+*.log.gz
+*.log.zip
 /logs/
+logs/
 
 ### NetBeans ###
 /nbproject/private/

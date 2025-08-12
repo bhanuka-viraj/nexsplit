@@ -42,6 +42,47 @@ logging:
   level:
     com.nexsplit: DEBUG
     org.springframework.security: DEBUG
+
+# ========================================
+# SWAGGER/OPENAPI CONFIGURATION
+# ========================================
+springdoc:
+  # API documentation path
+  api-docs:
+    path: /v3/api-docs
+  # Swagger UI configuration
+  swagger-ui:
+    path: /swagger-ui.html
+    # Enable the "Authorize" button
+    display-request-duration: true
+    # Show operation ID
+    display-operation-id: true
+    # Custom CSS for better styling
+    custom-css: |
+      .swagger-ui .auth-wrapper {
+        margin: 20px 0;
+      }
+      .swagger-ui .auth-container {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 15px;
+      }
+    # Custom JavaScript for better UX
+    custom-js: |
+      window.onload = function() {
+        // Auto-focus on the authorize button
+        setTimeout(function() {
+          const authBtn = document.querySelector('.auth-wrapper .btn.authorize');
+          if (authBtn) {
+            authBtn.style.backgroundColor = '#007bff';
+            authBtn.style.color = 'white';
+          }
+        }, 1000);
+      };
+  # Show all endpoints including those without @Operation annotation
+  default-produces-media-type: application/json
+  default-consumes-media-type: application/json
 #security:
 #  cors:
 #    allow-credentials: true
