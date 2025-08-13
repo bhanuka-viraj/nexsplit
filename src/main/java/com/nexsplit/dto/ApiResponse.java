@@ -1,4 +1,4 @@
-package com.nexsplit.model;
+package com.nexsplit.dto;
 
 import java.util.HashMap;
 import java.util.Map;

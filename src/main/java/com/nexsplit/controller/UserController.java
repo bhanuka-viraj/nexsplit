@@ -1,7 +1,6 @@
 package com.nexsplit.controller;
 
 import com.nexsplit.config.ApiConfig;
-import com.nexsplit.dto.auth.AuthResponse;
 import com.nexsplit.dto.auth.ChangePasswordDto;
 import com.nexsplit.dto.auth.PasswordResetDto;
 import com.nexsplit.dto.auth.PasswordResetRequestDto;
@@ -9,7 +8,7 @@ import com.nexsplit.dto.auth.PasswordValidationRequest;
 import com.nexsplit.dto.auth.PasswordValidationResponse;
 import com.nexsplit.dto.user.UpdateUserDto;
 import com.nexsplit.dto.user.UserProfileDto;
-import com.nexsplit.model.ApiResponse;
+import com.nexsplit.dto.ApiResponse;
 import com.nexsplit.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
