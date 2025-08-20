@@ -1,69 +1,133 @@
 # ========================================
-# DOCKER COMPOSE - PRODUCTION ENVIRONMENT
+# DOCKER COMPOSE - PRODUCTION DEPLOYMENT
 # ========================================
-# This file defines the production environment using DockerHub image
-# Use this for production deployment with external database
+# This file is for production deployment with enhanced security
+# Use this for production server deployment
 
 version: "3.8"
 
 services:
   # ========================================
+  # POSTGRESQL DATABASE SERVICE
+  # ========================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: nexsplit-postgres-prod
+    environment:
+      POSTGRES_DB: nexsplit
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD} # Must be set in production
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./src/main/resources/db/migration:/docker-entrypoint-initdb.d
+    networks:
+      - nexsplit-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d nexsplit"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ========================================
+  # ELASTICSEARCH SERVICE (PRODUCTION)
+  # ========================================
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: nexsplit-elasticsearch-prod
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=true
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:-changeme}
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      - cluster.name=nexsplit-prod-cluster
+      - node.name=nexsplit-prod-node
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - nexsplit-network
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -f -u elastic:${ELASTIC_PASSWORD:-changeme} http://localhost:9200/_cluster/health || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  # ========================================
+  # KIBANA SERVICE (PRODUCTION)
+  # ========================================
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: nexsplit-kibana-prod
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=elastic
+      - ELASTICSEARCH_PASSWORD=${ELASTIC_PASSWORD:-changeme}
+      - SERVER_NAME=nexsplit-kibana-prod
+      - SERVER_HOST=0.0.0.0
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - nexsplit-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  # ========================================
   # NEXSPLIT APPLICATION SERVICE (PRODUCTION)
   # ========================================
-  # The main Spring Boot application for production
   nexsplit-app:
-    # Use pre-built image from DockerHub
-    # Format: username/repository:tag
-    image: bhanukaviraj/nexsplit:latest
-    # Container name for production
+    image: bhanukaviraj/nexsplit:latest # Use latest tag for production
     container_name: nexsplit-app-prod
-    # Environment variables for production configuration
     environment:
-      # ========================================
-      # DATABASE CONFIGURATION
-      # ========================================
-      # Connect to external PostgreSQL database
-      # These MUST be provided via environment variables in production
-      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
-      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
-      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
-
-      # ========================================
-      # JWT CONFIGURATION
-      # ========================================
-      # JWT secret key for token generation and validation
-      # MUST be provided via environment variable in production
-      JWT_SECRET: ${JWT_SECRET}
-      # JWT token expiration time in minutes
-      JWT_EXPIRATION: ${JWT_EXPIRATION:-3600}
-
-      # ========================================
-      # OAUTH2 CONFIGURATION
-      # ========================================
-      # Google OAuth2 credentials for social login
-      # These MUST be provided via environment variables in production
-      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
-      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
-
-      # ========================================
-      # APPLICATION CONFIGURATION
-      # ========================================
-      # Spring profile for production environment
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-production}
-    # Port mapping: host_port:container_port
+      # Database connection
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/nexsplit
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD} # Must be set
+      # JWT Configuration
+      JWT_SECRET: ${JWT_SECRET} # Must be set in production
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-900}
+      # OAuth2 Configuration
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      # Elasticsearch Configuration
+      ELASTICSEARCH_HOST: elasticsearch
+      ELASTICSEARCH_PORT: 9200
+      ELASTICSEARCH_PROTOCOL: http
+      ELASTICSEARCH_INDEX_PREFIX: nexsplit-logs
+      ELASTICSEARCH_ENVIRONMENT: production
+      # Use production profile
+      SPRING_PROFILES_ACTIVE: production
     ports:
-      - "8080:8080" # Expose application port
-    # Network configuration
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
     networks:
-      - nexsplit-network # Custom network for service communication
-    # Volume mappings for production
+      - nexsplit-network
     volumes:
-      - nexsplit_logs:/app/logs # Named volume for log persistence
-    # Restart policy for production reliability
-    restart: unless-stopped # Restart unless manually stopped
-    # Health check configuration for production monitoring
+      - ./logs:/app/logs
+    restart: unless-stopped
     healthcheck:
-      # Command to check if application is healthy
       test:
         [
           "CMD",
@@ -73,22 +137,21 @@ services:
           "--spider",
           "http://localhost:8080/actuator/health",
         ]
-      interval: 30s # Check every 30 seconds
-      timeout: 10s # Wait 10 seconds for response
-      retries: 3 # Mark unhealthy after 3 failed attempts
-      start_period: 60s # Wait 60 seconds before first check (app startup time)
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
 # ========================================
 # VOLUMES
 # ========================================
-# Named volumes for production data persistence
 volumes:
-  nexsplit_logs: # Application logs volume
+  postgres_data:
+  elasticsearch_data:
 
 # ========================================
 # NETWORKS
 # ========================================
-# Custom network for service communication
 networks:
   nexsplit-network:
-    driver: bridge # Default bridge network driver
+    driver: bridge

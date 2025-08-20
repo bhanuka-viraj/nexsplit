@@ -9,34 +9,37 @@ import com.nexsplit.dto.auth.PasswordValidationResponse;
 import com.nexsplit.dto.user.UpdateUserDto;
 import com.nexsplit.dto.user.UserProfileDto;
 import com.nexsplit.dto.ApiResponse;
-import com.nexsplit.service.UserService;
+import com.nexsplit.service.AuditService;
+import com.nexsplit.service.impl.UserServiceImpl;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
+import com.nexsplit.util.LoggingUtil;
+import com.nexsplit.util.StructuredLoggingUtil;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
 
 @RestController
 @RequestMapping(ApiConfig.API_BASE_PATH + "/users")
 @Tag(name = "User Management", description = "User profile and management endpoints")
+@Slf4j
 public class UserController {
 
-    private static final Logger logger = LoggerFactory.getLogger(UserController.class);
+    private final UserServiceImpl userServiceImpl;
+    private final AuditService auditService;
 
-    private final UserService userService;
-
-    public UserController(UserService userService) {
-        this.userService = userService;
+    public UserController(UserServiceImpl userServiceImpl, AuditService auditService) {
+        this.userServiceImpl = userServiceImpl;
+        this.auditService = auditService;
     }
 
     @GetMapping("/profile")
@@ -47,13 +50,22 @@ public class UserController {
     })
     public ResponseEntity<UserProfileDto> getUserProfile(@AuthenticationPrincipal UserDetails userDetails) {
         if (userDetails == null) {
-            logger.error("UserDetails is null - authentication failed");
+            log.error("UserDetails is null - authentication failed");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
         String email = userDetails.getUsername();
-        logger.info("Getting profile for user: {}", email);
-        UserProfileDto profile = userService.getUserProfile(email);
+
+        // Log business event for Elasticsearch
+        StructuredLoggingUtil.logBusinessEvent(
+                "PROFILE_VIEW",
+                email,
+                "VIEW_PROFILE",
+                "SUCCESS",
+                Map.of("source", "WEB"));
+
+        log.info("Getting profile for user: {}", LoggingUtil.maskEmail(email));
+        UserProfileDto profile = userServiceImpl.getUserProfile(email);
         return ResponseEntity.ok(profile);
     }
 
@@ -67,18 +79,31 @@ public class UserController {
             @AuthenticationPrincipal UserDetails userDetails,
             @Valid @RequestBody UpdateUserDto updateUserDto) {
         if (userDetails == null) {
-            logger.error("UserDetails is null - authentication failed");
+            log.error("UserDetails is null - authentication failed");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
         String email = userDetails.getUsername();
-        logger.info("Updating profile for user: {}", email);
-        UserProfileDto updatedProfile = userService.updateUserProfile(
+
+        // Log business event for Elasticsearch
+        StructuredLoggingUtil.logBusinessEvent(
+                "PROFILE_UPDATE",
                 email,
-                updateUserDto.getFirstName(),
-                updateUserDto.getLastName(),
-                updateUserDto.getUsername(),
-                updateUserDto.getContactNumber());
+                "UPDATE_PROFILE",
+                "SUCCESS",
+                Map.of(
+                        "source", "WEB",
+                        "updatedFields", updateUserDto.toString()));
+
+        log.info("Updating profile for user: {}", LoggingUtil.maskEmail(email));
+        UserProfileDto updatedProfile = userServiceImpl.updateUserProfile(email, updateUserDto);
+
+        // Log user action asynchronously
+        auditService.logUserActionAsync(
+                userDetails.getUsername(),
+                "PROFILE_UPDATE",
+                "User profile updated successfully");
+
         return ResponseEntity.ok(updatedProfile);
     }
 
@@ -94,9 +119,17 @@ public class UserController {
                             HttpStatus.BAD_REQUEST.value()));
         }
 
-        userService.changePassword(email, changePasswordDto.getCurrentPassword(), changePasswordDto.getNewPassword());
+        userServiceImpl.changePassword(email, changePasswordDto.getCurrentPassword(),
+                changePasswordDto.getNewPassword());
 
-        logger.info("Password changed successfully for user: {}", email);
+        log.info("Password changed successfully for user: {}", LoggingUtil.maskEmail(email));
+
+        // Log user action asynchronously
+        auditService.logUserActionAsync(
+                email,
+                "PASSWORD_CHANGE",
+                "Password changed successfully");
+
         return ResponseEntity.ok(ApiResponse.successResponse("Password changed successfully"));
     }
 
@@ -104,7 +137,7 @@ public class UserController {
     public ResponseEntity<Map<String, Object>> requestPasswordReset(
             @Valid @RequestBody PasswordResetRequestDto requestDto) {
         try {
-            userService.requestPasswordReset(requestDto.getEmail());
+            userServiceImpl.requestPasswordReset(requestDto.getEmail());
             return ResponseEntity.ok(ApiResponse.successResponse("Password reset email sent successfully"));
         } catch (Exception e) {
             return ResponseEntity.ok(ApiResponse.successResponse("If the email exists, a reset link has been sent"));
@@ -122,7 +155,7 @@ public class UserController {
         }
 
         try {
-            userService.resetPassword(resetDto.getResetToken(), resetDto.getNewPassword());
+            userServiceImpl.resetPassword(resetDto.getResetToken(), resetDto.getNewPassword());
             return ResponseEntity.ok(ApiResponse.successResponse("Password reset successfully"));
         } catch (Exception e) {
             return ResponseEntity.badRequest()
@@ -134,21 +167,21 @@ public class UserController {
     @DeleteMapping("/deactivate")
     public ResponseEntity<Map<String, Object>> deactivateUser(@AuthenticationPrincipal UserDetails userDetails) {
         String email = userDetails.getUsername();
-        userService.deactivateUser(email);
+        userServiceImpl.deactivateUser(email);
 
-        logger.info("User deactivated: {}", email);
+        log.info("User deactivated: {}", LoggingUtil.maskEmail(email));
         return ResponseEntity.ok(ApiResponse.successResponse("User deactivated successfully"));
     }
 
     @GetMapping("/validate/email")
     public ResponseEntity<Map<String, Object>> validateEmail(@RequestParam String email) {
-        boolean isAvailable = userService.isEmailAvailable(email);
+        boolean isAvailable = userServiceImpl.isEmailAvailable(email);
         return ResponseEntity.ok(Map.of("available", isAvailable));
     }
 
     @GetMapping("/validate/username")
     public ResponseEntity<Map<String, Object>> validateUsername(@RequestParam String username) {
-        boolean isAvailable = userService.isUsernameAvailable(username);
+        boolean isAvailable = userServiceImpl.isUsernameAvailable(username);
         return ResponseEntity.ok(Map.of("available", isAvailable));
     }
 
@@ -159,7 +192,7 @@ public class UserController {
     })
     public ResponseEntity<PasswordValidationResponse> validatePassword(
             @Valid @RequestBody PasswordValidationRequest request) {
-        boolean isValid = userService.validatePasswordStrength(request.getPassword());
+        boolean isValid = userServiceImpl.validatePasswordStrength(request.getPassword());
         String message = isValid ? "Strong password" : "Password is not strong enough";
         return ResponseEntity.ok(new PasswordValidationResponse(isValid, message));
     }

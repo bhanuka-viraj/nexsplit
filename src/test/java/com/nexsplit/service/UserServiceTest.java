@@ -1,10 +1,13 @@
 package com.nexsplit.service;
 
+import com.nexsplit.dto.user.UpdateUserDto;
+import com.nexsplit.dto.user.UserDto;
 import com.nexsplit.dto.user.UserProfileDto;
 import com.nexsplit.exception.UserNotFoundException;
 import com.nexsplit.mapper.user.UserMapperRegistry;
 import com.nexsplit.model.User;
 import com.nexsplit.repository.UserRepository;
+import com.nexsplit.service.impl.UserServiceImpl;
 import com.nexsplit.util.JwtUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,7 +44,7 @@ class UserServiceTest {
     private UserMapperRegistry userMapperRegistry;
 
     @InjectMocks
-    private UserService userService;
+    private UserServiceImpl userServiceImpl;
 
     private User testUser;
     private OidcUser testOidcUser;
@@ -79,7 +82,7 @@ class UserServiceTest {
         });
 
         // When
-        User result = userService.processOAuthUser(testOidcUser);
+        User result = userServiceImpl.processOAuthUser(testOidcUser);
 
         // Then
         assertNotNull(result);
@@ -108,7 +111,7 @@ class UserServiceTest {
         when(userRepository.findByEmail("oauth@example.com")).thenReturn(Optional.of(existingUser));
 
         // When
-        User result = userService.processOAuthUser(testOidcUser);
+        User result = userServiceImpl.processOAuthUser(testOidcUser);
 
         // Then
         assertNotNull(result);
@@ -129,7 +132,7 @@ class UserServiceTest {
         });
 
         // When
-        User result = userService.processOAuthUser(testOidcUser);
+        User result = userServiceImpl.processOAuthUser(testOidcUser);
 
         // Then
         assertNotNull(result);
@@ -140,9 +143,25 @@ class UserServiceTest {
     @Test
     void registerUser_ValidData_ShouldCreateAndReturnUser() {
         // Given
+        UserDto userDto = UserDto.builder()
+                .email("new@example.com")
+                .password("StrongPass123!")
+                .firstName("New")
+                .lastName("User")
+                .username("newuser")
+                .contactNumber("1234567890")
+                .build();
+
         when(userRepository.existsActiveUserByEmail("new@example.com")).thenReturn(false);
         when(userRepository.existsActiveUserByUsername("newuser")).thenReturn(false);
         when(passwordEncoder.encode("StrongPass123!")).thenReturn("encodedPassword");
+        when(userMapperRegistry.toEntity(userDto)).thenReturn(User.builder()
+                .email("new@example.com")
+                .firstName("New")
+                .lastName("User")
+                .username("newuser")
+                .contactNumber("1234567890")
+                .build());
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
             User user = invocation.getArgument(0);
             user.setId(UUID.randomUUID().toString());
@@ -150,45 +169,66 @@ class UserServiceTest {
         });
 
         // When
-        User result = userService.registerUser("new@example.com", "StrongPass123!", "New", "User", "newuser",
-                "1234567890");
+        User result = userServiceImpl.registerUser(userDto);
 
         // Then
         assertNotNull(result);
         verify(userRepository).save(any(User.class));
         verify(passwordEncoder).encode("StrongPass123!");
+        verify(userMapperRegistry).toEntity(userDto);
     }
 
     @Test
     void registerUser_EmailAlreadyExists_ShouldThrowException() {
         // Given
+        UserDto userDto = UserDto.builder()
+                .email("existing@example.com")
+                .password("StrongPass123!")
+                .firstName("New")
+                .lastName("User")
+                .username("newuser")
+                .contactNumber("1234567890")
+                .build();
         when(userRepository.existsActiveUserByEmail("existing@example.com")).thenReturn(true);
 
         // When & Then
-        assertThrows(IllegalArgumentException.class, () -> userService.registerUser("existing@example.com",
-                "StrongPass123!", "New", "User", "newuser", "1234567890"));
+        assertThrows(IllegalArgumentException.class, () -> userServiceImpl.registerUser(userDto));
     }
 
     @Test
     void registerUser_UsernameAlreadyExists_ShouldThrowException() {
         // Given
+        UserDto userDto = UserDto.builder()
+                .email("new@example.com")
+                .password("StrongPass123!")
+                .firstName("New")
+                .lastName("User")
+                .username("existinguser")
+                .contactNumber("1234567890")
+                .build();
         when(userRepository.existsActiveUserByEmail("new@example.com")).thenReturn(false);
         when(userRepository.existsActiveUserByUsername("existinguser")).thenReturn(true);
 
         // When & Then
-        assertThrows(IllegalArgumentException.class, () -> userService.registerUser("new@example.com", "StrongPass123!",
-                "New", "User", "existinguser", "1234567890"));
+        assertThrows(IllegalArgumentException.class, () -> userServiceImpl.registerUser(userDto));
     }
 
     @Test
     void registerUser_WeakPassword_ShouldThrowException() {
         // Given
+        UserDto userDto = UserDto.builder()
+                .email("new@example.com")
+                .password("weak")
+                .firstName("New")
+                .lastName("User")
+                .username("newuser")
+                .contactNumber("1234567890")
+                .build();
         when(userRepository.existsActiveUserByEmail("new@example.com")).thenReturn(false);
         when(userRepository.existsActiveUserByUsername("newuser")).thenReturn(false);
 
         // When & Then
-        assertThrows(IllegalArgumentException.class,
-                () -> userService.registerUser("new@example.com", "weak", "New", "User", "newuser", "1234567890"));
+        assertThrows(IllegalArgumentException.class, () -> userServiceImpl.registerUser(userDto));
     }
 
     @Test
@@ -199,7 +239,7 @@ class UserServiceTest {
         when(jwtUtil.generateAccessToken("test@example.com", "USER")).thenReturn("jwtToken");
 
         // When
-        String result = userService.loginUser("test@example.com", "password123");
+        String result = userServiceImpl.loginUser("test@example.com", "password123");
 
         // Then
         assertEquals("jwtToken", result);
@@ -213,7 +253,8 @@ class UserServiceTest {
         when(passwordEncoder.matches("wrongpassword", "encodedPassword")).thenReturn(false);
 
         // When & Then
-        assertThrows(IllegalArgumentException.class, () -> userService.loginUser("test@example.com", "wrongpassword"));
+        assertThrows(IllegalArgumentException.class,
+                () -> userServiceImpl.loginUser("test@example.com", "wrongpassword"));
     }
 
     @Test
@@ -223,7 +264,7 @@ class UserServiceTest {
 
         // When & Then
         assertThrows(IllegalArgumentException.class,
-                () -> userService.loginUser("nonexistent@example.com", "password123"));
+                () -> userServiceImpl.loginUser("nonexistent@example.com", "password123"));
     }
 
     @Test
@@ -242,7 +283,7 @@ class UserServiceTest {
         when(userMapperRegistry.toProfileDto(testUser)).thenReturn(expectedProfile);
 
         // When
-        UserProfileDto result = userService.getUserProfile("test@example.com");
+        UserProfileDto result = userServiceImpl.getUserProfile("test@example.com");
 
         // Then
         assertNotNull(result);
@@ -257,7 +298,7 @@ class UserServiceTest {
         when(userRepository.findActiveUserByEmail("nonexistent@example.com")).thenReturn(Optional.empty());
 
         // When & Then
-        assertThrows(UserNotFoundException.class, () -> userService.getUserProfile("nonexistent@example.com"));
+        assertThrows(UserNotFoundException.class, () -> userServiceImpl.getUserProfile("nonexistent@example.com"));
     }
 
     @Test
@@ -278,8 +319,13 @@ class UserServiceTest {
         when(userMapperRegistry.toProfileDto(testUser)).thenReturn(expectedProfile);
 
         // When
-        UserProfileDto result = userService.updateUserProfile("test@example.com", "Jane", "Smith", "newusername",
-                "9876543210");
+        UpdateUserDto updateUserDto = UpdateUserDto.builder()
+                .firstName("Jane")
+                .lastName("Smith")
+                .username("newusername")
+                .contactNumber("9876543210")
+                .build();
+        UserProfileDto result = userServiceImpl.updateUserProfile("test@example.com", updateUserDto);
 
         // Then
         assertNotNull(result);
@@ -294,8 +340,14 @@ class UserServiceTest {
         when(userRepository.existsActiveUserByUsername("takenusername")).thenReturn(true);
 
         // When & Then
-        assertThrows(IllegalArgumentException.class, () -> userService.updateUserProfile("test@example.com", "Jane",
-                "Smith", "takenusername", "9876543210"));
+        UpdateUserDto updateUserDto = UpdateUserDto.builder()
+                .firstName("Jane")
+                .lastName("Smith")
+                .username("takenusername")
+                .contactNumber("9876543210")
+                .build();
+        assertThrows(IllegalArgumentException.class,
+                () -> userServiceImpl.updateUserProfile("test@example.com", updateUserDto));
     }
 
     @Test
@@ -307,7 +359,7 @@ class UserServiceTest {
         when(userRepository.save(any(User.class))).thenReturn(testUser);
 
         // When
-        userService.changePassword("test@example.com", "currentPassword", "StrongPass123!");
+        userServiceImpl.changePassword("test@example.com", "currentPassword", "StrongPass123!");
 
         // Then
         verify(passwordEncoder).encode("StrongPass123!");
@@ -322,7 +374,7 @@ class UserServiceTest {
 
         // When & Then
         assertThrows(IllegalArgumentException.class,
-                () -> userService.changePassword("test@example.com", "wrongPassword", "StrongPass123!"));
+                () -> userServiceImpl.changePassword("test@example.com", "wrongPassword", "StrongPass123!"));
     }
 
     @Test
@@ -333,7 +385,7 @@ class UserServiceTest {
 
         // When & Then
         assertThrows(IllegalArgumentException.class,
-                () -> userService.changePassword("test@example.com", "currentPassword", "weak"));
+                () -> userServiceImpl.changePassword("test@example.com", "currentPassword", "weak"));
     }
 
     @Test
@@ -343,7 +395,7 @@ class UserServiceTest {
         when(userRepository.save(any(User.class))).thenReturn(testUser);
 
         // When
-        userService.requestPasswordReset("test@example.com");
+        userServiceImpl.requestPasswordReset("test@example.com");
 
         // Then
         verify(userRepository).save(any(User.class));
@@ -355,7 +407,8 @@ class UserServiceTest {
         when(userRepository.findActiveUserByEmail("nonexistent@example.com")).thenReturn(Optional.empty());
 
         // When & Then
-        assertThrows(UserNotFoundException.class, () -> userService.requestPasswordReset("nonexistent@example.com"));
+        assertThrows(UserNotFoundException.class,
+                () -> userServiceImpl.requestPasswordReset("nonexistent@example.com"));
     }
 
     @Test
@@ -367,7 +420,7 @@ class UserServiceTest {
         when(userRepository.save(any(User.class))).thenReturn(testUser);
 
         // When
-        userService.resetPassword(resetToken, "StrongPass123!");
+        userServiceImpl.resetPassword(resetToken, "StrongPass123!");
 
         // Then
         verify(passwordEncoder).encode("StrongPass123!");
@@ -381,7 +434,7 @@ class UserServiceTest {
         when(userRepository.findByLastValidationCode(0)).thenReturn(Optional.empty());
 
         // When & Then
-        assertThrows(IllegalArgumentException.class, () -> userService.resetPassword(resetToken, "StrongPass123!"));
+        assertThrows(IllegalArgumentException.class, () -> userServiceImpl.resetPassword(resetToken, "StrongPass123!"));
     }
 
     @Test
@@ -391,7 +444,7 @@ class UserServiceTest {
         when(userRepository.save(any(User.class))).thenReturn(testUser);
 
         // When
-        userService.deactivateUser("test@example.com");
+        userServiceImpl.deactivateUser("test@example.com");
 
         // Then
         verify(userRepository).save(any(User.class));
@@ -403,7 +456,7 @@ class UserServiceTest {
         when(userRepository.findActiveUserByEmail("nonexistent@example.com")).thenReturn(Optional.empty());
 
         // When & Then
-        assertThrows(UserNotFoundException.class, () -> userService.deactivateUser("nonexistent@example.com"));
+        assertThrows(UserNotFoundException.class, () -> userServiceImpl.deactivateUser("nonexistent@example.com"));
     }
 
     @Test
@@ -412,7 +465,7 @@ class UserServiceTest {
         when(userRepository.existsActiveUserByEmail("available@example.com")).thenReturn(false);
 
         // When
-        boolean result = userService.isEmailAvailable("available@example.com");
+        boolean result = userServiceImpl.isEmailAvailable("available@example.com");
 
         // Then
         assertTrue(result);
@@ -424,7 +477,7 @@ class UserServiceTest {
         when(userRepository.existsActiveUserByEmail("taken@example.com")).thenReturn(true);
 
         // When
-        boolean result = userService.isEmailAvailable("taken@example.com");
+        boolean result = userServiceImpl.isEmailAvailable("taken@example.com");
 
         // Then
         assertFalse(result);
@@ -436,7 +489,7 @@ class UserServiceTest {
         when(userRepository.existsActiveUserByUsername("availableuser")).thenReturn(false);
 
         // When
-        boolean result = userService.isUsernameAvailable("availableuser");
+        boolean result = userServiceImpl.isUsernameAvailable("availableuser");
 
         // Then
         assertTrue(result);
@@ -448,7 +501,7 @@ class UserServiceTest {
         when(userRepository.existsActiveUserByUsername("takenuser")).thenReturn(true);
 
         // When
-        boolean result = userService.isUsernameAvailable("takenuser");
+        boolean result = userServiceImpl.isUsernameAvailable("takenuser");
 
         // Then
         assertFalse(result);
@@ -457,7 +510,7 @@ class UserServiceTest {
     @Test
     void validatePasswordStrength_StrongPassword_ShouldReturnTrue() {
         // When
-        boolean result = userService.validatePasswordStrength("StrongPass123!");
+        boolean result = userServiceImpl.validatePasswordStrength("StrongPass123!");
 
         // Then
         assertTrue(result);
@@ -466,7 +519,7 @@ class UserServiceTest {
     @Test
     void validatePasswordStrength_WeakPassword_ShouldReturnFalse() {
         // When
-        boolean result = userService.validatePasswordStrength("weak");
+        boolean result = userServiceImpl.validatePasswordStrength("weak");
 
         // Then
         assertFalse(result);
@@ -475,7 +528,7 @@ class UserServiceTest {
     @Test
     void validatePasswordStrength_NullPassword_ShouldReturnFalse() {
         // When
-        boolean result = userService.validatePasswordStrength(null);
+        boolean result = userServiceImpl.validatePasswordStrength(null);
 
         // Then
         assertFalse(result);

@@ -3,11 +3,13 @@ package com.nexsplit.controller;
 import com.nexsplit.dto.auth.AuthResponse;
 import com.nexsplit.dto.auth.LoginRequest;
 import com.nexsplit.dto.auth.RefreshTokenRequest;
+import com.nexsplit.dto.auth.RefreshTokenResponse;
 import com.nexsplit.dto.user.UserDto;
 import com.nexsplit.exception.SecurityException;
 import com.nexsplit.model.User;
-import com.nexsplit.service.RefreshTokenService;
-import com.nexsplit.service.UserService;
+import com.nexsplit.service.AuditService;
+import com.nexsplit.service.impl.RefreshTokenServiceImpl;
+import com.nexsplit.service.impl.UserServiceImpl;
 import com.nexsplit.config.ApiConfig;
 import com.nexsplit.util.JwtUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -15,14 +17,11 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
@@ -30,6 +29,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.web.bind.annotation.*;
+import com.nexsplit.util.LoggingUtil;
+import com.nexsplit.util.StructuredLoggingUtil;
+import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
 import java.util.Map;
@@ -37,18 +39,20 @@ import java.util.Map;
 @RestController
 @RequestMapping(ApiConfig.API_BASE_PATH + "/auth")
 @Tag(name = "Authentication", description = "Authentication and authorization endpoints")
+@Slf4j
 public class AuthController {
 
-        private static final Logger logger = LoggerFactory.getLogger(AuthController.class);
-
-        private final UserService userService;
-        private final RefreshTokenService refreshTokenService;
+        private final UserServiceImpl userServiceImpl;
+        private final RefreshTokenServiceImpl refreshTokenServiceImpl;
         private final JwtUtil jwtUtil;
+        private final AuditService auditService;
 
-        public AuthController(UserService userService, RefreshTokenService refreshTokenService, JwtUtil jwtUtil) {
-                this.userService = userService;
-                this.refreshTokenService = refreshTokenService;
+        public AuthController(UserServiceImpl userServiceImpl, RefreshTokenServiceImpl refreshTokenServiceImpl,
+                        JwtUtil jwtUtil, AuditService auditService) {
+                this.userServiceImpl = userServiceImpl;
+                this.refreshTokenServiceImpl = refreshTokenServiceImpl;
                 this.jwtUtil = jwtUtil;
+                this.auditService = auditService;
         }
 
         @GetMapping("/oauth-login")
@@ -67,17 +71,31 @@ public class AuthController {
         })
         public ResponseEntity<AuthResponse> oauthLogin(@AuthenticationPrincipal OidcUser oidcUser,
                         HttpServletRequest request, HttpServletResponse response) {
-                User user = userService.processOAuthUser(oidcUser);
-                String accessToken = userService.generateAccessToken(user);
+                User user = userServiceImpl.processOAuthUser(oidcUser);
+                String accessToken = userServiceImpl.generateAccessToken(user);
 
                 // Get client information for security tracking
                 String ipAddress = getClientIpAddress(request);
                 String userAgent = request.getHeader("User-Agent");
 
                 // Generate secure refresh token with family tracking
-                String refreshToken = refreshTokenService.generateRefreshToken(user.getId(), ipAddress, userAgent);
+                String refreshToken = refreshTokenServiceImpl.generateRefreshToken(user.getId(), ipAddress, userAgent);
 
-                logger.info("OAuth2 login successful for user: {}", user.getEmail());
+                // Log business event for Elasticsearch
+                StructuredLoggingUtil.logBusinessEvent(
+                                "OAUTH_LOGIN",
+                                user.getEmail(),
+                                "AUTHENTICATE",
+                                "SUCCESS",
+                                Map.of(
+                                                "source", "OAUTH_GOOGLE",
+                                                "ipAddress", ipAddress,
+                                                "userAgent", userAgent,
+                                                "userType",
+                                                user.getCreatedAt().equals(user.getModifiedAt()) ? "NEW_USER"
+                                                                : "EXISTING_USER"));
+
+                log.info("OAuth2 login successful for user: {}", LoggingUtil.maskEmail(user.getEmail()));
 
                 // Set refresh token as a cookie
                 ResponseCookie refreshCookie = ResponseCookie.from("refreshToken", refreshToken)
@@ -118,25 +136,30 @@ public class AuthController {
         })
         public ResponseEntity<AuthResponse> register(@Valid @RequestBody UserDto userDto,
                         HttpServletRequest request, HttpServletResponse response) {
-                String email = userDto.getEmail();
-                String password = userDto.getPassword();
-                String firstName = userDto.getFirstName();
-                String lastName = userDto.getLastName();
-                String username = userDto.getUsername();
-                String contactNumber = userDto.getContactNumber();
+                User user = userServiceImpl.registerUser(userDto);
 
-                User user = userService.registerUser(email, password, firstName, lastName, username, contactNumber);
-
-                String accessToken = userService.generateAccessToken(user);
+                String accessToken = userServiceImpl.generateAccessToken(user);
 
                 // Get client information for security tracking
                 String ipAddress = getClientIpAddress(request);
                 String userAgent = request.getHeader("User-Agent");
 
                 // Generate secure refresh token with family tracking
-                String refreshToken = refreshTokenService.generateRefreshToken(user.getId(), ipAddress, userAgent);
+                String refreshToken = refreshTokenServiceImpl.generateRefreshToken(user.getId(), ipAddress, userAgent);
 
-                logger.info("User registered successfully: {}", email);
+                // Log business event for Elasticsearch
+                StructuredLoggingUtil.logBusinessEvent(
+                                "USER_REGISTRATION",
+                                user.getEmail(),
+                                "CREATE_ACCOUNT",
+                                "SUCCESS",
+                                Map.of(
+                                                "source", "WEB",
+                                                "ipAddress", ipAddress,
+                                                "userAgent", userAgent,
+                                                "userType", "REGULAR"));
+
+                log.info("User registered successfully: {}", LoggingUtil.maskEmail(user.getEmail()));
 
                 ResponseCookie refreshCookie = ResponseCookie.from("refreshToken", refreshToken)
                                 .httpOnly(true)
@@ -175,19 +198,39 @@ public class AuthController {
                 String email = loginRequest.getEmail();
                 String password = loginRequest.getPassword();
 
-                String accessToken = userService.loginUser(email, password);
+                String accessToken = userServiceImpl.loginUser(email, password);
 
                 // Get user ID for refresh token generation
-                User user = userService.getUserByEmail(email);
+                UserDto user = userServiceImpl.getUserByEmail(email);
 
                 // Get client information for security tracking
                 String ipAddress = getClientIpAddress(request);
                 String userAgent = request.getHeader("User-Agent");
 
                 // Generate secure refresh token with family tracking
-                String refreshToken = refreshTokenService.generateRefreshToken(user.getId(), ipAddress, userAgent);
+                String refreshToken = refreshTokenServiceImpl.generateRefreshToken(user.getId(), ipAddress, userAgent);
 
-                logger.info("Email/password login successful for user: {}", email);
+                // Log business event for Elasticsearch
+                StructuredLoggingUtil.logBusinessEvent(
+                                "USER_LOGIN",
+                                email,
+                                "AUTHENTICATE",
+                                "SUCCESS",
+                                Map.of(
+                                                "source", "WEB",
+                                                "ipAddress", ipAddress,
+                                                "userAgent", userAgent,
+                                                "authMethod", "EMAIL_PASSWORD"));
+
+                log.info("Email/password login successful for user: {}", LoggingUtil.maskEmail(email));
+
+                // Log authentication event asynchronously
+                auditService.logAuthenticationEventAsync(
+                                user.getId(),
+                                "LOGIN_SUCCESS",
+                                getClientIpAddress(request),
+                                request.getHeader("User-Agent"),
+                                "Email/password login successful");
 
                 ResponseCookie refreshCookie = ResponseCookie.from("refreshToken", refreshToken)
                                 .httpOnly(true)
@@ -221,7 +264,7 @@ public class AuthController {
                         HttpServletRequest request,
                         HttpServletResponse response) {
                 if (refreshToken == null || refreshToken.isEmpty()) {
-                        logger.warn("Refresh token not found in cookies");
+                        log.warn("Refresh token not found in cookies");
                         return ResponseEntity.badRequest().build();
                 }
 
@@ -231,10 +274,10 @@ public class AuthController {
                         String userAgent = request.getHeader("User-Agent");
 
                         // Use the secure refresh token service with theft detection
-                        RefreshTokenService.RefreshTokenResponse tokenResponse = refreshTokenService
+                        RefreshTokenResponse tokenResponse = refreshTokenServiceImpl
                                         .refreshAccessToken(refreshToken, ipAddress, userAgent);
 
-                        logger.info("Token refreshed successfully");
+                        log.info("Token refreshed successfully");
 
                         // Clear the old refresh token cookie
                         ResponseCookie clearCookie = ResponseCookie.from("refreshToken", "")
@@ -264,14 +307,14 @@ public class AuthController {
 
                         return ResponseEntity.ok(authResponse);
                 } catch (SecurityException e) {
-                        logger.error("Security violation during token refresh: {}", e.getMessage());
+                        log.error("Security violation during token refresh: {}", e.getMessage());
                         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                                         .body(AuthResponse.builder()
                                                         .error("Security violation detected - please re-authenticate"
                                                                         + " " + e.getMessage())
                                                         .build());
                 } catch (Exception e) {
-                        logger.warn("Failed to refresh token: {}", e.getMessage());
+                        log.warn("Failed to refresh token: {}", e.getMessage());
                         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
                 }
         }
@@ -330,10 +373,10 @@ public class AuthController {
                         String userAgent = request.getHeader("User-Agent");
 
                         // Use the secure refresh token service with theft detection
-                        RefreshTokenService.RefreshTokenResponse tokenResponse = refreshTokenService
+                        RefreshTokenResponse tokenResponse = refreshTokenServiceImpl
                                         .refreshAccessToken(refreshToken, ipAddress, userAgent);
 
-                        logger.info("Token refreshed successfully");
+                        log.info("Token refreshed successfully");
 
                         // For body-based refresh, include the new refresh token in response
                         AuthResponse authResponse = AuthResponse.builder()
@@ -345,13 +388,13 @@ public class AuthController {
 
                         return ResponseEntity.ok(authResponse);
                 } catch (SecurityException e) {
-                        logger.error("Security violation during token refresh: {}", e.getMessage());
+                        log.error("Security violation during token refresh: {}", e.getMessage());
                         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                                         .body(AuthResponse.builder()
                                                         .error("Security violation detected - please re-authenticate")
                                                         .build());
                 } catch (Exception e) {
-                        logger.warn("Failed to refresh token: {}", e.getMessage());
+                        log.warn("Failed to refresh token: {}", e.getMessage());
                         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
                 }
         }
@@ -401,20 +444,42 @@ public class AuthController {
          * @return ResponseEntity with logout confirmation
          */
         public ResponseEntity<Map<String, Object>> logout(HttpServletRequest request, HttpServletResponse response) {
+                String userEmail = "unknown";
+
                 // Get user ID from access token in Authorization header
                 try {
                         String accessToken = request.getHeader("Authorization");
                         if (accessToken != null && accessToken.startsWith("Bearer ")) {
                                 accessToken = accessToken.substring(7);
                                 // Extract user email from access token
-                                String email = jwtUtil.getEmailFromToken(accessToken);
-                                User user = userService.getUserByEmail(email);
+                                userEmail = jwtUtil.getEmailFromToken(accessToken);
+                                UserDto user = userServiceImpl.getUserByEmail(userEmail);
                                 // Revoke all refresh tokens for the user
-                                refreshTokenService.revokeAllUserTokens(user.getId());
-                                logger.info("All tokens revoked for user: {}", email);
+                                refreshTokenServiceImpl.revokeAllUserTokens(user.getId());
+                                // Log business event for Elasticsearch
+                                StructuredLoggingUtil.logBusinessEvent(
+                                                "USER_LOGOUT",
+                                                userEmail,
+                                                "LOGOUT",
+                                                "SUCCESS",
+                                                Map.of(
+                                                                "source", "WEB",
+                                                                "ipAddress", getClientIpAddress(request),
+                                                                "userAgent", request.getHeader("User-Agent"),
+                                                                "logoutType", "FULL_LOGOUT"));
+
+                                log.info("All tokens revoked for user: {}", LoggingUtil.maskEmail(userEmail));
+
+                                // Log authentication event asynchronously
+                                auditService.logAuthenticationEventAsync(
+                                                user.getId(),
+                                                "LOGOUT",
+                                                getClientIpAddress(request),
+                                                request.getHeader("User-Agent"),
+                                                "User logged out - all tokens revoked");
                         }
                 } catch (Exception e) {
-                        logger.warn("Could not revoke tokens during logout: {}", e.getMessage());
+                        log.warn("Could not revoke tokens during logout: {}", e.getMessage());
                 }
 
                 // Clear the refresh token cookie
@@ -428,7 +493,7 @@ public class AuthController {
 
                 response.setHeader(HttpHeaders.SET_COOKIE, clearCookie.toString());
 
-                logger.info("User logged out successfully");
+                log.info("User logged out successfully: {}", LoggingUtil.maskEmail(userEmail));
                 return ResponseEntity.ok(Map.of("message", "Logged out successfully"));
         }
 

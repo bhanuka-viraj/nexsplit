@@ -1,7 +1,7 @@
 package com.nexsplit.config.security;
 
 import com.nexsplit.config.ApiConfig;
-import com.nexsplit.service.CustomUserDetailsService;
+import com.nexsplit.service.impl.CustomUserDetailsServiceImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -28,7 +28,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityConfig {
     private final JwtFilter jwtFilter;
-    private final CustomUserDetailsService userDetailsService;
+    private final CustomUserDetailsServiceImpl userDetailsService;
     private final ApiConfig apiConfig;
 
     @Bean

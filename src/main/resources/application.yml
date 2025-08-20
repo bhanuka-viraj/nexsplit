@@ -31,6 +31,9 @@ spring:
 
 server:
   port: 8080
+  # Enable virtual threads for better scalability
+  threads:
+    virtual: true
 
 jwt:
   secret: ${JWT_SECRET:X7k9pL2mQ4jR8vT6yB3nF1cD5hG9jL4kP8mQ2vT6yB3nF1cD5h} # Use environment variable with fallback
@@ -44,9 +47,31 @@ jwt:
 logging:
   file:
     name: logs/nexsplit.log
+
+# ========================================
+# EMAIL CONFIGURATION
+# ========================================
+app:
+  email:
+    from: ${MAIL_FROM:noreply@nexsplit.com}
+    from-name: ${MAIL_FROM_NAME:NexSplit}
+    base-url: ${APP_BASE_URL:http://localhost:8080}
+  pattern:
+    # Kibana-friendly log pattern with correlation ID
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{correlationId}] %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{correlationId}] %logger{36} - %msg%n"
   level:
-    com.nexsplit: DEBUG
-    org.springframework.security: DEBUG
+    # Application logging - INFO for production, DEBUG for development
+    com.nexsplit: INFO
+    # Security logging - WARN for production to reduce noise
+    org.springframework.security: WARN
+    # Performance logging
+    com.nexsplit.aspect.LoggingAspect: DEBUG
+    # Database logging - WARN for production
+    org.hibernate.SQL: WARN
+    org.hibernate.type.descriptor.sql.BasicBinder: WARN
+    # Structured logging
+    com.nexsplit.util.StructuredLoggingUtil: INFO
 
 # ========================================
 # SWAGGER/OPENAPI CONFIGURATION

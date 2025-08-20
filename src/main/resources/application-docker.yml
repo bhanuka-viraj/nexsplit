@@ -1,88 +1,65 @@
 # ========================================
-# SPRING BOOT CONFIGURATION - DOCKER PROFILE
+# DOCKER APPLICATION CONFIGURATION
 # ========================================
-# This configuration is used when running the application in Docker containers
-# It uses environment variables for flexible configuration across environments
+# Configuration for running the application in Docker containers
+# This profile is automatically activated when running in Docker
 
-# ========================================
-# DATABASE CONFIGURATION
-# ========================================
 spring:
   datasource:
-    # Database connection URL with environment variable support
-    # Format: jdbc:postgresql://host:port/database
-    url: ${SPRING_DATASOURCE_URL}
-    # Database username with environment variable support
-    username: ${SPRING_DATASOURCE_USERNAME}
-    # Database password with environment variable support
-    password: ${SPRING_DATASOURCE_PASSWORD}
-    # PostgreSQL JDBC driver class
-    driver-class-name: org.postgresql.Driver
-
-  # ========================================
-  # JPA CONFIGURATION
-  # ========================================
+    # Database connection for Docker environment
+    url: jdbc:postgresql://postgres:5432/nexsplit
+    username: postgres
+    password: ${DB_PASSWORD:Viraj@2002}
   jpa:
     hibernate:
-      # Disable automatic schema generation - use Flyway migrations instead
-      ddl-auto: none
+      ddl-auto: none # Managed by Flyway
     properties:
       hibernate:
-        # PostgreSQL dialect for Hibernate
         dialect: org.hibernate.dialect.PostgreSQLDialect
-
-  # ========================================
-  # FLYWAY MIGRATION CONFIGURATION
-  # ========================================
   flyway:
-    # Location of migration scripts
     locations: classpath:db/migration
-    # Automatically baseline existing database
     baseline-on-migrate: true
-
-  # ========================================
-  # OAUTH2 SECURITY CONFIGURATION
-  # ========================================
   security:
     oauth2:
       client:
         registration:
           google:
-            # Google OAuth2 client ID from environment variable
-            client-id: ${GOOGLE_CLIENT_ID}
-            # Google OAuth2 client secret from environment variable
-            client-secret: ${GOOGLE_CLIENT_SECRET}
-            # OAuth2 scopes for user profile and email
+            client-id: ${GOOGLE_CLIENT_ID:google-client-id}
+            client-secret: ${GOOGLE_CLIENT_SECRET:google-client-secret}
             scope: profile,email
-            # OAuth2 redirect URI with environment variable support
-            redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8080/login/oauth2/code/google}
+            redirect-uri: http://localhost:8080/login/oauth2/code/google
         provider:
           google:
-            # Google OAuth2 authorization endpoint
             authorization-uri: https://accounts.google.com/o/oauth2/auth
-            # Google OAuth2 token endpoint
             token-uri: https://oauth2.googleapis.com/token
-            # Google OAuth2 user info endpoint
             user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
-            # User attribute to use as username
             user-name-attribute: email
 
-# ========================================
-# SERVER CONFIGURATION
-# ========================================
 server:
-  # Application port (exposed in Docker container)
   port: 8080
+  # Enable virtual threads for better scalability
+  threads:
+    virtual: true
+
+jwt:
+  secret: ${JWT_SECRET:dev-jwt-secret-key-for-local-development-only}
+  access-token:
+    expiration-minutes: ${JWT_ACCESS_TOKEN_EXPIRATION:15}
+  refresh-token:
+    expiration-days: ${JWT_REFRESH_TOKEN_EXPIRATION:7}
+    max-family-size: ${JWT_REFRESH_TOKEN_MAX_FAMILY_SIZE:10}
+    max-concurrent-sessions: ${JWT_REFRESH_TOKEN_MAX_CONCURRENT_SESSIONS:5}
 
 # ========================================
-# JWT CONFIGURATION
+# ELASTICSEARCH CONFIGURATION
 # ========================================
-jwt:
-  # JWT secret key for token signing and validation
-  # MUST be provided via environment variable
-  secret: ${JWT_SECRET}
-  # JWT token expiration time in minutes
-  expiration: ${JWT_EXPIRATION:3600}
+# Configuration for Elasticsearch integration
+elasticsearch:
+  host: elasticsearch
+  port: 9200
+  protocol: http
+  index-prefix: nexsplit-logs
+  environment: docker
 
 # ========================================
 # LOGGING CONFIGURATION
@@ -91,25 +68,43 @@ logging:
   file:
     # Log file path inside Docker container
     name: /app/logs/nexsplit.log
+  pattern:
+    # Kibana-friendly log pattern with correlation ID
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{correlationId}] %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{correlationId}] %logger{36} - %msg%n"
   level:
-    # Application-specific logging level
+    # Application logging - INFO for production
     com.nexsplit: INFO
-    # Spring Security logging level
-    org.springframework.security: INFO
+    # Security logging - WARN for production to reduce noise
+    org.springframework.security: WARN
+    # Performance logging - DEBUG for monitoring
+    com.nexsplit.aspect.LoggingAspect: DEBUG
+    # Database logging - WARN for production
+    org.hibernate.SQL: WARN
+    org.hibernate.type.descriptor.sql.BasicBinder: WARN
+    # Structured logging
+    com.nexsplit.util.StructuredLoggingUtil: INFO
+    # Elasticsearch logging
+    org.elasticsearch: WARN
+    org.apache.http: WARN
 
 # ========================================
-# CORS CONFIGURATION
+# EMAIL CONFIGURATION
 # ========================================
-# Cross-Origin Resource Sharing settings for web frontend
 app:
+  email:
+    from: ${MAIL_FROM:noreply@nexsplit.com}
+    from-name: ${MAIL_FROM_NAME:NexSplit}
+    base-url: ${APP_BASE_URL:http://localhost:8080}
   cors:
     # Allow credentials (cookies, authorization headers)
     allow-credentials: true
-    # Allowed origins for CORS requests
+    # Allowed origins for CORS
     allowed-origins:
-      - http://localhost:3000 # Local development frontend
-      - http://127.0.0.1:3000 # Alternative local frontend
-      - ${FRONTEND_URL:http://localhost:3000} # Production frontend URL
+      - http://localhost:3000
+      - http://127.0.0.1:3000
+      - http://localhost:8080
+      - http://127.0.0.1:8080
     # Allowed HTTP methods
     allowed-methods:
       - GET
@@ -118,19 +113,53 @@ app:
       - PATCH
       - DELETE
       - OPTIONS
-    # Allowed HTTP headers
+    # Allowed headers
     allowed-headers:
-      - Authorization # JWT token header
-      - Origin # Origin header
-      - Content-Type # Content type header
-      - Accept # Accept header
-      - Accept-Encoding # Accept encoding header
-      - Accept-Language # Accept language header
-      - Access-Control-Allow-Origin # CORS header
-      - Access-Control-Allow-Headers # CORS header
-      - Access-Control-Request-Method # CORS header
-      - X-Requested-With # AJAX request header
-      - X-Auth-Token # Custom auth header
-      - X-Xsrf-Token # CSRF protection header
-      - Cache-Control # Cache control header
-      - Id-Token # OAuth2 ID token header
+      - Authorization
+      - Origin
+      - Content-Type
+      - Accept
+      - Accept-Encoding
+      - Accept-Language
+      - Access-Control-Allow-Origin
+      - Access-Control-Allow-Headers
+      - Access-Control-Request-Method
+      - X-Requested-With
+      - X-Auth-Token
+      - X-Xsrf-Token
+      - Cache-Control
+      - Id-Token
+      - X-Correlation-ID
+
+# ========================================
+# SWAGGER/OPENAPI CONFIGURATION
+# ========================================
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    display-request-duration: true
+    display-operation-id: true
+    custom-css: |
+      .swagger-ui .auth-wrapper {
+        margin: 20px 0;
+      }
+      .swagger-ui .auth-container {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 15px;
+      }
+    custom-js: |
+      window.onload = function() {
+        setTimeout(function() {
+          const authBtn = document.querySelector('.auth-wrapper .btn.authorize');
+          if (authBtn) {
+            authBtn.style.backgroundColor = '#007bff';
+            authBtn.style.color = 'white';
+          }
+        }, 1000);
+      };
+  default-produces-media-type: application/json
+  default-consumes-media-type: application/json

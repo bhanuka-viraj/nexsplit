@@ -39,6 +39,114 @@ services:
       retries: 5 # Mark unhealthy after 5 failed attempts
 
   # ========================================
+  # ELASTICSEARCH SERVICE
+  # ========================================
+  # Provides search and analytics engine for log aggregation
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: nexsplit-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - cluster.name=nexsplit-cluster
+      - node.name=nexsplit-node
+    ports:
+      - "9200:9200" # HTTP API
+      - "9300:9300" # Node-to-node communication
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - nexsplit-network
+    healthcheck:
+      test:
+        ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ========================================
+  # KIBANA SERVICE
+  # ========================================
+  # Provides web interface for log visualization and analysis
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: nexsplit-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - SERVER_NAME=nexsplit-kibana
+      - SERVER_HOST=0.0.0.0
+    ports:
+      - "5601:5601" # Web interface
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - nexsplit-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ========================================
+  # FILEBEAT SERVICE
+  # ========================================
+  # Provides real-time log shipping from files to Elasticsearch
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.11.0
+    container_name: nexsplit-filebeat
+    user: root
+    command: >
+      bash -c "
+        echo 'filebeat.inputs:' > /usr/share/filebeat/filebeat.yml &&
+        echo '  - type: log' >> /usr/share/filebeat/filebeat.yml &&
+        echo '    enabled: true' >> /usr/share/filebeat/filebeat.yml &&
+        echo '    paths:' >> /usr/share/filebeat/filebeat.yml &&
+        echo '      - /app/logs/structured-logs.json' >> /usr/share/filebeat/filebeat.yml &&
+        echo '    json.keys_under_root: true' >> /usr/share/filebeat/filebeat.yml &&
+        echo '    json.add_error_key: true' >> /usr/share/filebeat/filebeat.yml &&
+        echo '    json.message_key: message' >> /usr/share/filebeat/filebeat.yml &&
+        echo '    fields:' >> /usr/share/filebeat/filebeat.yml &&
+        echo '      application: nexsplit' >> /usr/share/filebeat/filebeat.yml &&
+        echo '      environment: development' >> /usr/share/filebeat/filebeat.yml &&
+        echo '      log_type: structured' >> /usr/share/filebeat/filebeat.yml &&
+        echo '    fields_under_root: true' >> /usr/share/filebeat/filebeat.yml &&
+        echo '    scan_frequency: 10s' >> /usr/share/filebeat/filebeat.yml &&
+        echo 'output.elasticsearch:' >> /usr/share/filebeat/filebeat.yml &&
+        echo '  hosts: [\"elasticsearch:9200\"]' >> /usr/share/filebeat/filebeat.yml &&
+        echo '  protocol: \"http\"' >> /usr/share/filebeat/filebeat.yml &&
+        echo '  indices:' >> /usr/share/filebeat/filebeat.yml &&
+        echo '    - index: \"nexsplit-structured-%{+yyyy.MM.dd}\"' >> /usr/share/filebeat/filebeat.yml &&
+        echo '      when.contains:' >> /usr/share/filebeat/filebeat.yml &&
+        echo '        log_type: \"structured\"' >> /usr/share/filebeat/filebeat.yml &&
+        echo 'setup.kibana:' >> /usr/share/filebeat/filebeat.yml &&
+        echo '  host: \"kibana:5601\"' >> /usr/share/filebeat/filebeat.yml &&
+        echo 'setup.dashboards.enabled: true' >> /usr/share/filebeat/filebeat.yml &&
+        echo 'setup.template.enabled: true' >> /usr/share/filebeat/filebeat.yml &&
+        echo 'logging.level: info' >> /usr/share/filebeat/filebeat.yml &&
+        chmod 644 /usr/share/filebeat/filebeat.yml &&
+        filebeat -e
+      "
+    volumes:
+      - ./logs:/app/logs:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - nexsplit-network
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep filebeat || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ========================================
   # NEXSPLIT APPLICATION SERVICE
   # ========================================
   # The main Spring Boot application
@@ -66,13 +174,15 @@ services:
     # Port mapping: host_port:container_port
     ports:
       - "8080:8080" # Expose application port
-    # Dependencies - wait for database to be healthy
+    # Dependencies - wait for database and elasticsearch to be healthy
     depends_on:
       postgres:
-        condition: service_healthy # Wait until health check passes
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
     # Network configuration
     networks:
-      - nexsplit-network # Same network as database
+      - nexsplit-network # Same network as database and elasticsearch
     # Volume mappings
     volumes:
       - ./logs:/app/logs # Map local logs directory to container logs
@@ -85,6 +195,7 @@ services:
 # Named volumes for data persistence
 volumes:
   postgres_data: # PostgreSQL data volume
+  elasticsearch_data: # Elasticsearch data volume
 
 # ========================================
 # NETWORKS

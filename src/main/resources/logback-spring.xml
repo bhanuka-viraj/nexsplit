@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- Include Spring Boot default configurations -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+    <include resource="org/springframework/boot/logging/logback/file-appender.xml"/>
+
+    <!-- Structured JSON logging appender for Filebeat monitoring -->
+    <appender name="STRUCTURED_JSON" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/structured-logs.json</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/structured-logs.%d{yyyy-MM-dd}.json</fileNamePattern>
+            <maxHistory>7</maxHistory>
+        </rollingPolicy>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeMdc>true</includeMdc>
+            <includeContext>false</includeContext>
+            <customFields>{"application":"nexsplit","environment":"development","logType":"structured"}</customFields>
+        </encoder>
+    </appender>
+
+    <!-- Profile-specific configurations -->
+    <springProfile name="default">
+        <!-- Route structured logs -->
+        <logger name="com.nexsplit.util.StructuredLoggingUtil" level="INFO" additivity="false">
+            <appender-ref ref="STRUCTURED_JSON"/>
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </logger>
+
+        <!-- Route performance logs -->
+        <logger name="com.nexsplit.aspect.LoggingAspect" level="DEBUG" additivity="false">
+            <appender-ref ref="STRUCTURED_JSON"/>
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </logger>
+
+        <!-- Route security logs -->
+        <logger name="com.nexsplit.config.security" level="WARN" additivity="false">
+            <appender-ref ref="STRUCTURED_JSON"/>
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </logger>
+
+        <!-- Root logger configuration -->
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+        </root>
+    </springProfile>
+
+    <!-- Docker profile for containerized environment -->
+    <springProfile name="docker">
+        <!-- Route structured logs -->
+        <logger name="com.nexsplit.util.StructuredLoggingUtil" level="INFO" additivity="false">
+            <appender-ref ref="STRUCTURED_JSON"/>
+            <appender-ref ref="CONSOLE"/>
+        </logger>
+
+        <!-- Route performance logs -->
+        <logger name="com.nexsplit.aspect.LoggingAspect" level="DEBUG" additivity="false">
+            <appender-ref ref="STRUCTURED_JSON"/>
+            <appender-ref ref="CONSOLE"/>
+        </logger>
+
+        <!-- Route security logs -->
+        <logger name="com.nexsplit.config.security" level="WARN" additivity="false">
+            <appender-ref ref="STRUCTURED_JSON"/>
+            <appender-ref ref="CONSOLE"/>
+        </logger>
+
+        <!-- Root logger configuration -->
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <!-- Production profile -->
+    <springProfile name="production">
+        <!-- Route structured logs -->
+        <logger name="com.nexsplit.util.StructuredLoggingUtil" level="INFO" additivity="false">
+            <appender-ref ref="STRUCTURED_JSON"/>
+            <appender-ref ref="FILE"/>
+        </logger>
+
+        <!-- Route performance logs -->
+        <logger name="com.nexsplit.aspect.LoggingAspect" level="INFO" additivity="false">
+            <appender-ref ref="STRUCTURED_JSON"/>
+            <appender-ref ref="FILE"/>
+        </logger>
+
+        <!-- Route security logs -->
+        <logger name="com.nexsplit.config.security" level="WARN" additivity="false">
+            <appender-ref ref="STRUCTURED_JSON"/>
+            <appender-ref ref="FILE"/>
+        </logger>
+
+        <!-- Root logger configuration -->
+        <root level="WARN">
+            <appender-ref ref="FILE"/>
+        </root>
+    </springProfile>
+</configuration>

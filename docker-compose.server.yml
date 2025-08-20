@@ -39,6 +39,59 @@ services:
       retries: 5 # Mark unhealthy after 5 failed attempts
 
   # ========================================
+  # ELASTICSEARCH SERVICE
+  # ========================================
+  # Provides search and analytics engine for log aggregation
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: nexsplit-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - cluster.name=nexsplit-cluster
+      - node.name=nexsplit-node
+    ports:
+      - "9200:9200" # HTTP API
+      - "9300:9300" # Node-to-node communication
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - nexsplit-network
+    healthcheck:
+      test:
+        ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ========================================
+  # KIBANA SERVICE
+  # ========================================
+  # Provides web interface for log visualization and analysis
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: nexsplit-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - SERVER_NAME=nexsplit-kibana
+      - SERVER_HOST=0.0.0.0
+    ports:
+      - "5601:5601" # Web interface
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - nexsplit-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ========================================
   # NEXSPLIT APPLICATION SERVICE
   # ========================================
   # The main Spring Boot application using pre-built DockerHub image
@@ -64,13 +117,15 @@ services:
     # Port mapping: host_port:container_port
     ports:
       - "8080:8080" # Expose application port
-    # Dependencies - wait for database to be healthy
+    # Dependencies - wait for database and elasticsearch to be healthy
     depends_on:
       postgres:
         condition: service_healthy # Wait until health check passes
+      elasticsearch:
+        condition: service_healthy
     # Network configuration
     networks:
-      - nexsplit-network # Same network as database
+      - nexsplit-network # Same network as database and elasticsearch
     # Volume mappings
     volumes:
       - ./logs:/app/logs # Map local logs directory to container logs
@@ -98,6 +153,7 @@ services:
 # Named volumes for data persistence
 volumes:
   postgres_data: # PostgreSQL data volume
+  elasticsearch_data: # Elasticsearch data volume
 
 # ========================================
 # NETWORKS

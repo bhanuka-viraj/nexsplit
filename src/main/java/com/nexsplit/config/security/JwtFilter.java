@@ -1,31 +1,30 @@
 package com.nexsplit.config.security;
 
 import com.nexsplit.config.ApiConfig;
-import com.nexsplit.service.CustomUserDetailsService;
+import com.nexsplit.service.impl.CustomUserDetailsServiceImpl;
 import com.nexsplit.util.JwtUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import com.nexsplit.util.LoggingUtil;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
-import java.util.Collections;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class JwtFilter extends OncePerRequestFilter {
-    private static final Logger logger = LoggerFactory.getLogger(JwtFilter.class);
     private final JwtUtil jwtUtil;
-    private final CustomUserDetailsService userDetailsService;
+    private final CustomUserDetailsServiceImpl userDetailsService;
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
@@ -48,13 +47,13 @@ public class JwtFilter extends OncePerRequestFilter {
         String authHeader = request.getHeader("Authorization");
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            logger.debug("No valid Authorization header found for path: {}", request.getRequestURI());
+            log.debug("No valid Authorization header found for path: {}", request.getRequestURI());
             chain.doFilter(request, response);
             return;
         }
 
         String token = authHeader.substring(7);
-        logger.debug("Processing JWT token: {}", token.substring(0, Math.min(10, token.length())) + "...");
+        log.debug("Processing JWT token: {}...", token.substring(0, Math.min(8, token.length())));
 
         if (jwtUtil.validateToken(token)) {
             if (SecurityContextHolder.getContext().getAuthentication() == null) {
@@ -68,10 +67,10 @@ public class JwtFilter extends OncePerRequestFilter {
                         userDetails, null, userDetails.getAuthorities());
                 auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(auth);
-                logger.info("Authenticated user: {} with role: {}", email, role);
+                log.info("Authenticated user: {} with role: {}", LoggingUtil.maskEmail(email), role);
             }
         } else {
-            logger.warn("Invalid or expired JWT token");
+            log.warn("Invalid or expired JWT token");
             response.setHeader("WWW-Authenticate", "Bearer error=\"invalid_token\"");
             response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid JWT token");
             return;
@@ -79,4 +78,5 @@ public class JwtFilter extends OncePerRequestFilter {
 
         chain.doFilter(request, response);
     }
+
 }
