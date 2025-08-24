@@ -107,6 +107,7 @@ services:
       # OAuth2 Configuration
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+
       # Elasticsearch Configuration
       ELASTICSEARCH_HOST: elasticsearch
       ELASTICSEARCH_PORT: 9200

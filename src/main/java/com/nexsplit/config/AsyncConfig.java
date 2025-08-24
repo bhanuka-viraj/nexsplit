@@ -25,7 +25,6 @@ import java.util.concurrent.Executor;
  * - Automatic scheduling by JVM
  * 
  * 3. USE CASES IN NEXSPLIT:
- * - Email sending (SMTP operations are I/O-bound)
  * - External API calls (HTTP requests)
  * - File processing (PDF generation, reports)
  * - Background data processing
@@ -41,10 +40,9 @@ import java.util.concurrent.Executor;
  * EXAMPLES:
  * =========
  * @Async("asyncExecutor")
- * public CompletableFuture<String> sendEmailAsync(String to, String subject) {
+ * public CompletableFuture<String> callExternalApiAsync(String url) {
  * // This will run in a virtual thread
- * emailService.send(to, subject);
- * return CompletableFuture.completedFuture("Email sent");
+ * return CompletableFuture.completedFuture("API call completed");
  * }
  * 
  * @Async("asyncExecutor")

@@ -1,8 +1,9 @@
 # ========================================
-# DOCKER COMPOSE - DEVELOPMENT ENVIRONMENT
+# DEBUG DOCKER COMPOSE CONFIGURATION
 # ========================================
-# This file defines the development environment with both application and database
-# Use this for local development and testing
+# This file is for running the application in IntelliJ IDE
+# It includes only the necessary supporting services (database, logging)
+# The main application will run directly in IntelliJ for easier debugging
 
 version: "3.8"
 
@@ -10,28 +11,19 @@ services:
   # ========================================
   # POSTGRESQL DATABASE SERVICE
   # ========================================
-  # Provides the database for the application
   postgres:
-    # Use official PostgreSQL image with Alpine Linux (smaller size)
     image: postgres:15-alpine
-    # Container name for easy identification
-    container_name: nexsplit-postgres
-    # Environment variables for database configuration
+    container_name: nexsplit-postgres-debug
     environment:
       POSTGRES_DB: nexsplit # Database name
       POSTGRES_USER: postgres # Database username
       POSTGRES_PASSWORD: ${DB_PASSWORD:-Viraj@2002} # Database password from environment variable
-    # Port mapping: host_port:container_port
     ports:
-      - "5432:5432" # Expose PostgreSQL port for external access
-    # Volume mappings for data persistence
+      - "5433:5432" # Expose PostgreSQL port for external access (changed to avoid conflict)
     volumes:
-      - postgres_data:/var/lib/postgresql/data # Database data persistence
-      - ./src/main/resources/db/migration:/docker-entrypoint-initdb.d # Auto-run migrations
-    # Network configuration
+      - postgres_data_debug:/var/lib/postgresql/data # Database data persistence
     networks:
-      - nexsplit-network # Custom network for service communication
-    # Health check to ensure database is ready
+      - nexsplit-debug-network # Custom network for service communication
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d nexsplit"] # PostgreSQL health check command
       interval: 10s # Check every 10 seconds
@@ -41,10 +33,9 @@ services:
   # ========================================
   # ELASTICSEARCH SERVICE
   # ========================================
-  # Provides search and analytics engine for log aggregation
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
-    container_name: nexsplit-elasticsearch
+    container_name: nexsplit-elasticsearch-debug
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
@@ -55,9 +46,9 @@ services:
       - "9200:9200" # HTTP API
       - "9300:9300" # Node-to-node communication
     volumes:
-      - elasticsearch_data:/usr/share/elasticsearch/data
+      - elasticsearch_data_debug:/usr/share/elasticsearch/data
     networks:
-      - nexsplit-network
+      - nexsplit-debug-network
     healthcheck:
       test:
         ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
@@ -69,13 +60,12 @@ services:
   # ========================================
   # KIBANA SERVICE
   # ========================================
-  # Provides web interface for log visualization and analysis
   kibana:
     image: docker.elastic.co/kibana/kibana:8.11.0
-    container_name: nexsplit-kibana
+    container_name: nexsplit-kibana-debug
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-      - SERVER_NAME=nexsplit-kibana
+      - SERVER_NAME=nexsplit-kibana-debug
       - SERVER_HOST=0.0.0.0
     ports:
       - "5601:5601" # Web interface
@@ -83,7 +73,7 @@ services:
       elasticsearch:
         condition: service_healthy
     networks:
-      - nexsplit-network
+      - nexsplit-debug-network
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status || exit 1"]
       interval: 30s
@@ -94,10 +84,9 @@ services:
   # ========================================
   # FILEBEAT SERVICE
   # ========================================
-  # Provides real-time log shipping from files to Elasticsearch
   filebeat:
     image: docker.elastic.co/beats/filebeat:8.11.0
-    container_name: nexsplit-filebeat
+    container_name: nexsplit-filebeat-debug
     user: root
     command: >
       bash -c "
@@ -111,7 +100,7 @@ services:
         echo '    json.message_key: message' >> /usr/share/filebeat/filebeat.yml &&
         echo '    fields:' >> /usr/share/filebeat/filebeat.yml &&
         echo '      application: nexsplit' >> /usr/share/filebeat/filebeat.yml &&
-        echo '      environment: development' >> /usr/share/filebeat/filebeat.yml &&
+        echo '      environment: debug' >> /usr/share/filebeat/filebeat.yml &&
         echo '      log_type: structured' >> /usr/share/filebeat/filebeat.yml &&
         echo '    fields_under_root: true' >> /usr/share/filebeat/filebeat.yml &&
         echo '    scan_frequency: 10s' >> /usr/share/filebeat/filebeat.yml &&
@@ -138,7 +127,7 @@ services:
       elasticsearch:
         condition: service_healthy
     networks:
-      - nexsplit-network
+      - nexsplit-debug-network
     healthcheck:
       test: ["CMD-SHELL", "pgrep filebeat || exit 1"]
       interval: 30s
@@ -146,62 +135,16 @@ services:
       retries: 5
       start_period: 60s
 
-  # ========================================
-  # NEXSPLIT APPLICATION SERVICE
-  # ========================================
-  # The main Spring Boot application
-  nexsplit-app:
-    # Build configuration - build from local Dockerfile
-    build:
-      context: . # Build context (current directory)
-      dockerfile: Dockerfile # Use our custom Dockerfile
-    # Container name for easy identification
-    container_name: nexsplit-app
-    # Environment variables for the application
-    environment:
-      # Database connection - use service name 'postgres' as hostname
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/nexsplit
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-Viraj@2002} # Use environment variable
-      # JWT Configuration
-      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-key-for-local-development-only}
-      JWT_EXPIRATION: ${JWT_EXPIRATION:-60}
-      # OAuth2 Configuration
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-google-client-id}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-google-client-secret}
-
-      # Use Docker profile for configuration
-      SPRING_PROFILES_ACTIVE: docker
-    # Port mapping: host_port:container_port
-    ports:
-      - "8080:8080" # Expose application port
-    # Dependencies - wait for database and elasticsearch to be healthy
-    depends_on:
-      postgres:
-        condition: service_healthy
-      elasticsearch:
-        condition: service_healthy
-    # Network configuration
-    networks:
-      - nexsplit-network # Same network as database and elasticsearch
-    # Volume mappings
-    volumes:
-      - ./logs:/app/logs # Map local logs directory to container logs
-    # Restart policy
-    restart: unless-stopped # Restart unless manually stopped
-
 # ========================================
 # VOLUMES
 # ========================================
-# Named volumes for data persistence
 volumes:
-  postgres_data: # PostgreSQL data volume
-  elasticsearch_data: # Elasticsearch data volume
+  postgres_data_debug: # PostgreSQL data volume for debug
+  elasticsearch_data_debug: # Elasticsearch data volume for debug
 
 # ========================================
 # NETWORKS
 # ========================================
-# Custom network for service communication
 networks:
-  nexsplit-network:
+  nexsplit-debug-network:
     driver: bridge # Default bridge network driver

@@ -76,6 +76,17 @@ JWT_EXPIRATION=60
 GOOGLE_CLIENT_ID=your-google-client-id-for-development
 GOOGLE_CLIENT_SECRET=your-google-client-secret-for-development
 
+# EMAIL CONFIGURATION (OPTIONAL)
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=your-email@gmail.com
+MAIL_PASSWORD=your-app-password
+MAIL_FROM=noreply@nexsplit.com
+MAIL_FROM_NAME=NexSplit
+APP_BASE_URL=http://localhost:8080
+EMAIL_RATE_LIMIT=10
+EMAIL_DAILY_LIMIT=50
+
 # APPLICATION CONFIGURATION
 SPRING_PROFILES_ACTIVE=dev
 FRONTEND_URL=http://localhost:3000
@@ -113,6 +124,38 @@ export GOOGLE_CLIENT_ID=your-google-client-id-for-development
 export GOOGLE_CLIENT_SECRET=your-google-client-secret-for-development
 ```
 
+### 4. Email Configuration (Optional)
+
+**For Email Testing:**
+
+If you want to test email functionality (password reset, welcome emails), configure an email provider:
+
+**Gmail Setup (Recommended for Development):**
+
+1. Enable 2-Factor Authentication on your Google account
+2. Generate an App Password:
+   - Go to Google Account Settings → Security → App Passwords
+   - Generate a new app password for "Mail"
+3. Use the app password in your configuration:
+
+```bash
+export MAIL_HOST=smtp.gmail.com
+export MAIL_PORT=587
+export MAIL_USERNAME=your-email@gmail.com
+export MAIL_PASSWORD=your-16-character-app-password
+export MAIL_FROM=noreply@nexsplit.com
+export MAIL_FROM_NAME=NexSplit
+export APP_BASE_URL=http://localhost:8080
+```
+
+**Other Email Providers:**
+
+- **Outlook**: `smtp-mail.outlook.com:587`
+- **Yahoo**: `smtp.mail.yahoo.com:587`
+- **SendGrid**: `smtp.sendgrid.net:587` (use API key as password)
+
+**Note:** Email functionality is optional. The application will work without email configuration, but password reset and welcome emails won't be sent.
+
 ## 🏃‍♂️ Running the Application
 
 ### Method 1: Using Startup Scripts (Recommended)
@@ -121,17 +164,17 @@ export GOOGLE_CLIENT_SECRET=your-google-client-secret-for-development
 
 ```powershell
 # Run the automated startup script
-.\start-dev.ps1
+.\scripts\start-dev.ps1
 ```
 
 **Linux/Mac:**
 
 ```bash
 # Make script executable (first time only)
-chmod +x start-dev.sh
+chmod +x scripts/start-dev.sh
 
 # Run the automated startup script
-./start-dev.sh
+./scripts/start-dev.sh
 ```
 
 ### Method 2: Using Maven Wrapper (Manual)
@@ -380,7 +423,7 @@ SELECT * FROM users LIMIT 5;
 **Q: Do I need to set environment variables manually even if I have `.env.development` file?**
 A: **YES** - Spring Boot doesn't automatically read `.env` files like Node.js. You have three options:
 
-1. **Use the startup scripts** (Recommended): `.\start-dev.ps1` or `./start-dev.sh`
+1. **Use the startup scripts** (Recommended): `.\scripts\start-dev.ps1` or `./scripts/start-dev.sh`
 2. **Set manually each time**: `$env:DB_PASSWORD = "Viraj@2002"`
 3. **Use a `.env` loader library**: Add `spring-dotenv` dependency (not recommended for production)
 

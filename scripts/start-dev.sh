@@ -42,6 +42,17 @@ else
     export GOOGLE_CLIENT_SECRET="google-client-secret"
     export SPRING_PROFILES_ACTIVE="dev"
     export FRONTEND_URL="http://localhost:3000"
+    
+    # Set default email configuration (optional)
+    export MAIL_HOST="smtp.gmail.com"
+    export MAIL_PORT="587"
+    export MAIL_USERNAME="noreply@nexsplit.com"
+    export MAIL_PASSWORD="your-app-password"
+    export MAIL_FROM="noreply@nexsplit.com"
+    export MAIL_FROM_NAME="NexSplit"
+    export APP_BASE_URL="http://localhost:8080"
+    export EMAIL_RATE_LIMIT="10"
+    export EMAIL_DAILY_LIMIT="50"
 fi
 
 # ========================================
@@ -56,6 +67,16 @@ for var in "${required_vars[@]}"; do
     else
         echo "   ❌ $var is not set"
         exit 1
+    fi
+done
+
+echo "🔍 Checking optional email variables..."
+optional_vars=("MAIL_HOST" "MAIL_PORT" "MAIL_USERNAME" "MAIL_PASSWORD" "MAIL_FROM" "MAIL_FROM_NAME" "APP_BASE_URL" "EMAIL_RATE_LIMIT" "EMAIL_DAILY_LIMIT")
+for var in "${optional_vars[@]}"; do
+    if [ -n "${!var}" ]; then
+        echo "   ✅ $var is set"
+    else
+        echo "   ℹ️  $var is not set (email functionality will be limited)"
     fi
 done
 

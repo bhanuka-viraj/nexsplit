@@ -18,15 +18,32 @@ cp env.development.template .env.development
 notepad .env.development
 ```
 
+**Optional: Configure Email (Recommended)**
+
+If you want to test email functionality:
+
+```bash
+# Edit email settings in .env.development
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=your-email@gmail.com
+MAIL_PASSWORD=your-app-password
+MAIL_FROM=noreply@nexsplit.com
+MAIL_FROM_NAME=NexSplit
+APP_BASE_URL=http://localhost:8080
+```
+
+> **Note**: For Gmail, you'll need to create an App Password if 2FA is enabled.
+
 ### Step 2: Start Application
 
 ```bash
 # Windows
-.\start-dev.ps1
+.\scripts\start-dev.ps1
 
 # Linux/Mac
-chmod +x start-dev.sh
-./start-dev.sh
+chmod +x scripts/*.sh
+./scripts/start-dev.sh
 ```
 
 ### Step 3: Verify
@@ -66,8 +83,14 @@ $env:JWT_SECRET = "dev-jwt-secret-key-for-local-development-only"
 
 **Environment variables not working?**
 
-- Use the startup scripts: `.\start-dev.ps1`
+- Use the startup scripts: `.\scripts\start-dev.ps1`
 - Or set manually: `$env:DB_PASSWORD = "Viraj@2002"`
+
+**Email not working?**
+
+- Check email configuration in `.env.development`
+- For Gmail: Ensure App Password is used (not regular password)
+- Check application logs for SMTP errors
 
 **Database connection failed?**
 

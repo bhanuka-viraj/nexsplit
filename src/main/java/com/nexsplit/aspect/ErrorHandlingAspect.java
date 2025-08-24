@@ -23,6 +23,7 @@ public class ErrorHandlingAspect {
         String methodName = joinPoint.getSignature().toShortString();
         String className = joinPoint.getTarget().getClass().getSimpleName();
 
+
         log.error("Exception in {} method {}: {} - Stack trace: {}",
                 className, methodName, ex.getMessage(), ex);
     }

@@ -19,6 +19,7 @@ spring:
   flyway:
     locations: classpath:db/migration
     baseline-on-migrate: true
+
   security:
     oauth2:
       client:
@@ -88,14 +89,23 @@ logging:
     org.elasticsearch: WARN
     org.apache.http: WARN
 
-# ========================================
-# EMAIL CONFIGURATION
-# ========================================
-app:
-  email:
-    from: ${MAIL_FROM:noreply@nexsplit.com}
-    from-name: ${MAIL_FROM_NAME:NexSplit}
-    base-url: ${APP_BASE_URL:http://localhost:8080}
+
+  pattern:
+    # Kibana-friendly log pattern with correlation ID
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{correlationId}] %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{correlationId}] %logger{36} - %msg%n"
+  level:
+    # Application logging - INFO for production, DEBUG for development
+    com.nexsplit: INFO
+    # Security logging - WARN for production to reduce noise
+    org.springframework.security: WARN
+    # Performance logging
+    com.nexsplit.aspect.LoggingAspect: DEBUG
+    # Database logging - WARN for production
+    org.hibernate.SQL: WARN
+    org.hibernate.type.descriptor.sql.BasicBinder: WARN
+    # Structured logging
+    com.nexsplit.util.StructuredLoggingUtil: INFO
   cors:
     # Allow credentials (cookies, authorization headers)
     allow-credentials: true

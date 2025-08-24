@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/nexsplit
+    url: jdbc:postgresql://localhost:5433/nexsplit
     username: postgres
     password: ${DB_PASSWORD:Viraj@2002} # Use environment variable with fallback for development
   #    driver-class-name: org.postgresql.Driver
@@ -13,6 +13,7 @@ spring:
   flyway:
     locations: classpath:db/migration
     baseline-on-migrate: true
+
   security:
     oauth2:
       client:
@@ -28,6 +29,26 @@ spring:
             token-uri: https://oauth2.googleapis.com/token
             user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
             user-name-attribute: email
+
+  # ========================================
+  # EMAIL CONFIGURATION
+  # ========================================
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:nexsplit.mail@gmail.com}
+    password: ${MAIL_PASSWORD:geye wsfr znuk fqub}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+    default-encoding: UTF-8
 
 server:
   port: 8080
@@ -49,13 +70,10 @@ logging:
     name: logs/nexsplit.log
 
 # ========================================
-# EMAIL CONFIGURATION
+# APPLICATION CONFIGURATION
 # ========================================
 app:
-  email:
-    from: ${MAIL_FROM:noreply@nexsplit.com}
-    from-name: ${MAIL_FROM_NAME:NexSplit}
-    base-url: ${APP_BASE_URL:http://localhost:8080}
+  base-url: ${APP_BASE_URL:http://localhost:8080}
   pattern:
     # Kibana-friendly log pattern with correlation ID
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{correlationId}] %logger{36} - %msg%n"

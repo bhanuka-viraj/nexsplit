@@ -35,6 +35,17 @@ if (Test-Path ".env.development") {
     $env:GOOGLE_CLIENT_SECRET = "google-client-secret"
     $env:SPRING_PROFILES_ACTIVE = "dev"
     $env:FRONTEND_URL = "http://localhost:3000"
+    
+    # Set default email configuration (optional)
+    $env:MAIL_HOST = "smtp.gmail.com"
+    $env:MAIL_PORT = "587"
+    $env:MAIL_USERNAME = "noreply@nexsplit.com"
+    $env:MAIL_PASSWORD = "your-app-password"
+    $env:MAIL_FROM = "noreply@nexsplit.com"
+    $env:MAIL_FROM_NAME = "NexSplit"
+    $env:APP_BASE_URL = "http://localhost:8080"
+    $env:EMAIL_RATE_LIMIT = "10"
+    $env:EMAIL_DAILY_LIMIT = "50"
 }
 
 # ========================================
@@ -43,11 +54,21 @@ if (Test-Path ".env.development") {
 Write-Host "Verifying environment variables..." -ForegroundColor Yellow
 
 $requiredVars = @("DB_PASSWORD", "JWT_SECRET", "JWT_EXPIRATION")
+$optionalVars = @("MAIL_HOST", "MAIL_PORT", "MAIL_USERNAME", "MAIL_PASSWORD", "MAIL_FROM", "MAIL_FROM_NAME", "APP_BASE_URL", "EMAIL_RATE_LIMIT", "EMAIL_DAILY_LIMIT")
 foreach ($var in $requiredVars) {
     if ([Environment]::GetEnvironmentVariable($var, "Process")) {
         Write-Host "   OK: $var is set" -ForegroundColor Green
     } else {
         Write-Host "   ERROR: $var is not set" -ForegroundColor Red
+    }
+}
+
+Write-Host "Checking optional email variables..." -ForegroundColor Yellow
+foreach ($var in $optionalVars) {
+    if ([Environment]::GetEnvironmentVariable($var, "Process")) {
+        Write-Host "   OK: $var is set" -ForegroundColor Green
+    } else {
+        Write-Host "   INFO: $var is not set (email functionality will be limited)" -ForegroundColor Yellow
     }
 }
 

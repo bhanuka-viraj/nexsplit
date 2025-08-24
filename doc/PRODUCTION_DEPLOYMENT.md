@@ -77,6 +77,17 @@ JWT_EXPIRATION=3600
 GOOGLE_CLIENT_ID=your-production-google-client-id
 GOOGLE_CLIENT_SECRET=your-production-google-client-secret
 
+# EMAIL CONFIGURATION (PRODUCTION)
+MAIL_HOST=smtp.sendgrid.net
+MAIL_PORT=587
+MAIL_USERNAME=apikey
+MAIL_PASSWORD=your-sendgrid-api-key
+MAIL_FROM=noreply@nexsplit.com
+MAIL_FROM_NAME=NexSplit
+APP_BASE_URL=https://nexsplit.com
+EMAIL_RATE_LIMIT=100
+EMAIL_DAILY_LIMIT=1000
+
 # APPLICATION CONFIGURATION
 SPRING_PROFILES_ACTIVE=production
 FRONTEND_URL=https://nexsplit.com
@@ -224,7 +235,7 @@ echo "📋 Health Check: https://your-domain.com/actuator/health"
 **Make executable:**
 
 ```bash
-chmod +x deploy-production.sh
+chmod +x scripts/deploy-production.sh
 ```
 
 ## 🏷️ Tag Management Best Practices
@@ -258,7 +269,7 @@ docker tag bhanukaviraj/nexsplit:v1.0.1 bhanukaviraj/nexsplit:latest
 ```bash
 # Rollback to previous version
 docker tag bhanukaviraj/nexsplit:v1.0.0 bhanukaviraj/nexsplit:latest
-./deploy-production.sh v1.0.0
+./scripts/deploy-production.sh v1.0.0
 ```
 
 ### **Tag Naming Conventions**
@@ -279,6 +290,63 @@ latest          # Current production
 feature-auth    # Feature branch
 hotfix-login    # Hotfix branch
 ```
+
+## 📧 Email Configuration for Production
+
+### **Recommended Email Providers**
+
+**1. SendGrid (Recommended)**
+
+- **Pros**: High deliverability, excellent API, good analytics
+- **Setup**:
+  ```bash
+  MAIL_HOST=smtp.sendgrid.net
+  MAIL_PORT=587
+  MAIL_USERNAME=apikey
+  MAIL_PASSWORD=your-sendgrid-api-key
+  ```
+
+**2. Amazon SES**
+
+- **Pros**: Cost-effective, high volume, AWS integration
+- **Setup**:
+  ```bash
+  MAIL_HOST=email-smtp.us-east-1.amazonaws.com
+  MAIL_PORT=587
+  MAIL_USERNAME=your-ses-username
+  MAIL_PASSWORD=your-ses-password
+  ```
+
+**3. Mailgun**
+
+- **Pros**: Developer-friendly, good APIs, reasonable pricing
+- **Setup**:
+  ```bash
+  MAIL_HOST=smtp.mailgun.org
+  MAIL_PORT=587
+  MAIL_USERNAME=your-mailgun-username
+  MAIL_PASSWORD=your-mailgun-password
+  ```
+
+### **Email Security Best Practices**
+
+**1. Domain Verification**
+
+- Verify your domain with your email provider
+- Use a dedicated subdomain for sending (e.g., `mail.nexsplit.com`)
+- Set up SPF, DKIM, and DMARC records
+
+**2. Rate Limiting**
+
+- Configure appropriate rate limits based on your provider
+- Monitor email sending patterns
+- Set up alerts for unusual activity
+
+**3. Email Content**
+
+- Use professional templates
+- Include unsubscribe links (for marketing emails)
+- Follow CAN-SPAM and GDPR requirements
 
 ## 🔐 Security for Production
 
@@ -359,14 +427,14 @@ docker logs nexsplit-app-prod 2>&1 | grep ERROR
 
 ```bash
 # Automated build script
-./build-and-push.sh v1.0.0
+./scripts/build-and-push.sh v1.0.0
 ```
 
 **2. Deploy to Production:**
 
 ```bash
 # Automated deployment
-./deploy-production.sh v1.0.0
+./scripts/deploy-production.sh v1.0.0
 ```
 
 **3. Post-Deployment Verification:**

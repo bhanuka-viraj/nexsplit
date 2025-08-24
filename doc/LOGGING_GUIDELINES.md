@@ -175,7 +175,6 @@ Track email communications for user engagement and troubleshooting.
 
 ### Implementation
 
-- **Service**: `EmailService`
 - **Async**: Virtual thread execution
 - **Integration**: Both structured and audit logging
 
@@ -184,7 +183,7 @@ Track email communications for user engagement and troubleshooting.
 #### 1. Password Reset Emails
 
 ```java
-emailService.sendPasswordResetEmailAsync(email, resetToken, username)
+// Password reset token generated (email sending removed)
     .exceptionally(throwable -> {
         log.error("Failed to send password reset email to: {}", maskedEmail, throwable);
         return "Email sending failed";
@@ -194,7 +193,7 @@ emailService.sendPasswordResetEmailAsync(email, resetToken, username)
 #### 2. Welcome Emails
 
 ```java
-emailService.sendWelcomeEmailAsync(savedUser.getEmail(), savedUser.getFullName())
+// Welcome email sending removed
     .exceptionally(throwable -> {
         log.error("Failed to send welcome email to: {}", maskedEmail, throwable);
         return "Email sending failed";

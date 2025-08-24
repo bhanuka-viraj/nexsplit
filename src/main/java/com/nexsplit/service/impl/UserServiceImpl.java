@@ -9,6 +9,8 @@ import com.nexsplit.mapper.user.UserMapperRegistry;
 import com.nexsplit.model.User;
 import com.nexsplit.repository.UserRepository;
 import com.nexsplit.service.UserService;
+
+import com.nexsplit.service.AuditService;
 import com.nexsplit.service.EmailService;
 import com.nexsplit.util.JwtUtil;
 import com.nexsplit.util.LoggingUtil;
@@ -21,6 +23,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +34,8 @@ public class UserServiceImpl implements UserService {
     private final JwtUtil jwtUtil;
     private final BCryptPasswordEncoder passwordEncoder;
     private final UserMapperRegistry userMapperRegistry;
+
+    private final AuditService auditService;
     private final EmailService emailService;
 
     @Transactional
@@ -103,16 +109,35 @@ public class UserServiceImpl implements UserService {
         User user = userMapperRegistry.toEntity(userDto);
         user.setPassword(passwordEncoder.encode(userDto.getPassword()));
 
-        User savedUser = userRepository.save(user);
-        log.info("User registered successfully: {}", LoggingUtil.maskEmail(savedUser.getEmail()));
+        // Set email as unverified initially
+        user.setIsEmailValidate(false);
 
-        // Send welcome email asynchronously
-        emailService.sendWelcomeEmailAsync(savedUser.getEmail(), savedUser.getFullName())
-                .exceptionally(throwable -> {
-                    log.error("Failed to send welcome email to: {}", LoggingUtil.maskEmail(savedUser.getEmail()),
-                            throwable);
-                    return "Email sending failed";
-                });
+        // Generate email verification token (6-digit code)
+        int verificationToken = (int) (Math.random() * 900000) + 100000;
+        user.setLastValidationCode(verificationToken);
+
+        User savedUser = userRepository.save(user);
+        log.info("User registered successfully: {}", LoggingUtil.maskEmail(userDto.getEmail()));
+
+        // Send email verification asynchronously
+        CompletableFuture.runAsync(() -> {
+            try {
+                emailService.sendEmailVerification(user.getEmail(), String.valueOf(verificationToken),
+                        user.getUsername());
+                log.info("Email verification sent successfully to: {}", LoggingUtil.maskEmail(user.getEmail()));
+            } catch (Exception e) {
+                log.error("Failed to send email verification to: {}", LoggingUtil.maskEmail(user.getEmail()), e);
+                // Don't throw exception to avoid affecting user registration
+            }
+        });
+
+        // Log audit event asynchronously
+        CompletableFuture.runAsync(() -> {
+            auditService.logUserActionAsync(savedUser.getId(), "USER_REGISTERED", "New user registered successfully");
+        }).exceptionally(throwable -> {
+            log.error("Error in audit logging for user registration: {}", throwable.getMessage(), throwable);
+            return null;
+        });
 
         return savedUser;
     }
@@ -129,6 +154,12 @@ public class UserServiceImpl implements UserService {
         if (!passwordEncoder.matches(password, user.getPassword())) {
             log.warn("Login failed - invalid credentials for: {}", LoggingUtil.maskEmail(email));
             throw new IllegalArgumentException("Invalid credentials");
+        }
+
+        // Check if email is verified
+        if (!user.getIsEmailValidate()) {
+            log.warn("Login failed - email not verified for: {}", LoggingUtil.maskEmail(email));
+            throw new IllegalArgumentException("Email not verified. Please check your email and verify your account.");
         }
 
         log.info("User login successful: {}", LoggingUtil.maskEmail(email));
@@ -161,6 +192,11 @@ public class UserServiceImpl implements UserService {
 
     public UserDto getUserByEmail(String email) {
         return userMapperRegistry.toDto(userRepository.getUserByEmail(email));
+    }
+
+    public User getUserByEmailForVerification(String email) {
+        return userRepository.findActiveUserByEmail(email)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
     }
 
     public UserProfileDto getUserProfile(String email) {
@@ -230,12 +266,23 @@ public class UserServiceImpl implements UserService {
 
         log.info("Password reset token generated for: {} - Token: {}", LoggingUtil.maskEmail(email), resetToken);
 
-        // Send password reset email asynchronously
-        emailService.sendPasswordResetEmailAsync(email, resetToken, user.getUsername())
-                .exceptionally(throwable -> {
-                    log.error("Failed to send password reset email to: {}", LoggingUtil.maskEmail(email), throwable);
-                    return "Email sending failed";
-                });
+        // Send password reset email
+        try {
+            emailService.sendPasswordResetEmail(email, String.valueOf(resetToken), user.getUsername());
+            log.info("Password reset email sent successfully to: {}", LoggingUtil.maskEmail(email));
+        } catch (Exception e) {
+            log.error("Failed to send password reset email to: {}", LoggingUtil.maskEmail(email), e);
+            // Don't throw exception to avoid revealing if email exists
+        }
+
+        // Log audit event asynchronously
+        CompletableFuture.runAsync(() -> {
+            auditService.logSecurityEventAsync(user.getId(), "PASSWORD_RESET_REQUESTED",
+                    "Password reset requested via email");
+        }).exceptionally(throwable -> {
+            log.error("Error in audit logging for password reset: {}", throwable.getMessage(), throwable);
+            return null;
+        });
     }
 
     @Transactional
@@ -281,6 +328,109 @@ public class UserServiceImpl implements UserService {
         user.softDelete();
         userRepository.save(user);
         log.info("User deactivated successfully: {}", LoggingUtil.maskEmail(email));
+    }
+
+    @Transactional
+    public void resendEmailVerification(String email) {
+        log.info("Processing email verification resend for: {}", LoggingUtil.maskEmail(email));
+
+        User user = userRepository.findActiveUserByEmail(email)
+                .orElseThrow(() -> {
+                    log.warn("Email verification resend failed - user not found: {}", LoggingUtil.maskEmail(email));
+                    return new UserNotFoundException("User not found");
+                });
+
+        // Check if email is already verified
+        if (user.getIsEmailValidate()) {
+            log.warn("Email verification resend failed - email already verified: {}", LoggingUtil.maskEmail(email));
+            throw new IllegalArgumentException("Email is already verified");
+        }
+
+        // Generate new verification token
+        int verificationToken = (int) (Math.random() * 900000) + 100000;
+        user.setLastValidationCode(verificationToken);
+        userRepository.save(user);
+
+        log.info("Email verification token regenerated for: {} - Token: {}", LoggingUtil.maskEmail(email),
+                verificationToken);
+
+        // Send email verification asynchronously
+        CompletableFuture.runAsync(() -> {
+            try {
+                emailService.sendEmailVerification(email, String.valueOf(verificationToken), user.getUsername());
+                log.info("Email verification resent successfully to: {}", LoggingUtil.maskEmail(email));
+            } catch (Exception e) {
+                log.error("Failed to resend email verification to: {}", LoggingUtil.maskEmail(email), e);
+                // Don't throw exception to avoid affecting the request
+            }
+        });
+
+        // Log audit event asynchronously
+        CompletableFuture.runAsync(() -> {
+            auditService.logSecurityEventAsync(user.getId(), "EMAIL_VERIFICATION_RESENT",
+                    "Email verification resent to user");
+        }).exceptionally(throwable -> {
+            log.error("Error in audit logging for email verification resend: {}", throwable.getMessage(), throwable);
+            return null;
+        });
+    }
+
+    @Transactional
+    public User confirmEmail(String confirmationToken) {
+        log.info("Processing email confirmation with token: {}", LoggingUtil.maskSensitiveData(confirmationToken));
+
+        // Find user by confirmation token
+        int tokenValue;
+        try {
+            tokenValue = Integer.parseInt(confirmationToken);
+        } catch (NumberFormatException e) {
+            log.warn("Email confirmation failed - invalid token format: {}", confirmationToken);
+            throw new IllegalArgumentException("Invalid confirmation token format");
+        }
+
+        User user = userRepository.findByLastValidationCode(tokenValue)
+                .orElseThrow(() -> {
+                    log.warn("Email confirmation failed - invalid token: {}", confirmationToken);
+                    return new IllegalArgumentException("Invalid confirmation token");
+                });
+
+        // Check if email is already confirmed
+        if (user.getIsEmailValidate()) {
+            log.warn("Email confirmation failed - email already confirmed for: {}",
+                    LoggingUtil.maskEmail(user.getEmail()));
+            throw new IllegalArgumentException("Email is already confirmed");
+        }
+
+        // Mark email as verified and clear the token
+        user.setIsEmailValidate(true);
+        user.setLastValidationCode(0); // Clear the confirmation token
+        User confirmedUser = userRepository.save(user);
+
+        log.info("Email confirmed successfully for: {}", LoggingUtil.maskEmail(confirmedUser.getEmail()));
+
+        // Send welcome email asynchronously after successful verification
+        CompletableFuture.runAsync(() -> {
+            try {
+                emailService.sendWelcomeEmail(confirmedUser.getEmail(), confirmedUser.getUsername());
+                log.info("Welcome email sent successfully after verification to: {}",
+                        LoggingUtil.maskEmail(confirmedUser.getEmail()));
+            } catch (Exception e) {
+                log.error("Failed to send welcome email after verification to: {}",
+                        LoggingUtil.maskEmail(confirmedUser.getEmail()), e);
+                // Don't throw exception to avoid affecting email confirmation
+            }
+        });
+
+        // Log audit event for email confirmation
+        CompletableFuture.runAsync(() -> {
+            auditService.logSecurityEventAsync(confirmedUser.getId(), "EMAIL_CONFIRMED",
+                    "Email confirmed successfully");
+        }).exceptionally(throwable -> {
+            log.error("Error in audit logging for email confirmation: {}", throwable.getMessage(), throwable);
+            return null;
+        });
+
+        return confirmedUser;
     }
 
     // Validation methods

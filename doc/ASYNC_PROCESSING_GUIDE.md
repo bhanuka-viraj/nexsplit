@@ -137,13 +137,13 @@ server:
 
 ```java
 @Service
-public class EmailService {
+public class NotificationService {
 
     @Async("asyncExecutor")
-    public CompletableFuture<String> sendEmailAsync(String to, String subject) {
+    public CompletableFuture<String> sendNotificationAsync(String to, String subject) {
         // This runs in a virtual thread
-        emailService.send(to, subject);
-        return CompletableFuture.completedFuture("Email sent");
+        notificationService.send(to, subject);
+        return CompletableFuture.completedFuture("Notification sent");
     }
 }
 ```
@@ -163,12 +163,12 @@ public void logAuditEventAsync(String userId, String action) {
 ```java
 public CompletableFuture<String> processUserRegistration(String email) {
     // Start multiple operations in parallel
-    CompletableFuture<String> emailFuture = sendEmailAsync(email);
+    CompletableFuture<String> notificationFuture = sendNotificationAsync(email);
     CompletableFuture<String> pdfFuture = generatePdfAsync(email);
     CompletableFuture<String> apiFuture = callExternalApiAsync(email);
 
     // Wait for all to complete
-    return CompletableFuture.allOf(emailFuture, pdfFuture, apiFuture)
+    return CompletableFuture.allOf(notificationFuture, pdfFuture, apiFuture)
         .thenApply(v -> "All operations completed");
 }
 ```
@@ -189,28 +189,28 @@ public CompletableFuture<String> riskyOperationAsync() {
 
 ## Real-World Examples
 
-### Email Service
+### Notification Service
 
 ```java
 @Service
-public class EmailService {
+public class NotificationService {
 
     @Async("asyncExecutor")
-    public CompletableFuture<String> sendWelcomeEmailAsync(String email, String name) {
+    public CompletableFuture<String> sendWelcomeNotificationAsync(String email, String name) {
         try {
-            // Simulate SMTP operation
+            // Simulate notification operation
             Thread.sleep(500);
 
             // Log the event
             StructuredLoggingUtil.logBusinessEvent(
-                "EMAIL_SENT",
+                "NOTIFICATION_SENT",
                 email,
-                "SEND_WELCOME_EMAIL",
+                "SEND_WELCOME_NOTIFICATION",
                 "SUCCESS",
                 Map.of("recipientName", name)
             );
 
-            return CompletableFuture.completedFuture("Welcome email sent to " + email);
+            return CompletableFuture.completedFuture("Welcome notification sent to " + email);
         } catch (Exception e) {
             return CompletableFuture.failedFuture(e);
         }
@@ -361,7 +361,7 @@ class AsyncServiceTest {
     @Test
     void testAsyncEmailSending() throws Exception {
         // Start async operation
-        CompletableFuture<String> future = asyncService.sendEmailAsync("test@example.com", "Test", "Content");
+        CompletableFuture<String> future = asyncService.sendNotificationAsync("test@example.com", "Test", "Content");
 
         // Wait for result
         String result = future.get(5, TimeUnit.SECONDS);

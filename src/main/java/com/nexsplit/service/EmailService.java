@@ -1,49 +1,50 @@
 package com.nexsplit.service;
 
-import java.util.concurrent.CompletableFuture;
-
 /**
- * Email service interface for sending various types of emails
- * All operations are asynchronous to avoid blocking the main thread
+ * Service interface for sending emails
  */
 public interface EmailService {
 
     /**
-     * Send password reset email asynchronously
+     * Send a simple text email
      * 
-     * @param email      User's email address
-     * @param resetToken The reset token to include in the email
-     * @param username   User's username for personalization
-     * @return CompletableFuture with the result of the email sending operation
+     * @param to      recipient email address
+     * @param subject email subject
+     * @param text    email body text
      */
-    CompletableFuture<String> sendPasswordResetEmailAsync(String email, int resetToken, String username);
+    void sendSimpleEmail(String to, String subject, String text);
 
     /**
-     * Send welcome email asynchronously for new users
+     * Send password reset email
      * 
-     * @param email    User's email address
-     * @param fullName User's full name for personalization
-     * @return CompletableFuture with the result of the email sending operation
+     * @param to         recipient email address
+     * @param resetToken password reset token
+     * @param username   user's username
      */
-    CompletableFuture<String> sendWelcomeEmailAsync(String email, String fullName);
+    void sendPasswordResetEmail(String to, String resetToken, String username);
 
     /**
-     * Send email confirmation asynchronously
+     * Send welcome email to new user
      * 
-     * @param email             User's email address
-     * @param confirmationToken The confirmation token
-     * @param username          User's username for personalization
-     * @return CompletableFuture with the result of the email sending operation
+     * @param to       recipient email address
+     * @param username user's username
      */
-    CompletableFuture<String> sendEmailConfirmationAsync(String email, String confirmationToken, String username);
+    void sendWelcomeEmail(String to, String username);
 
     /**
-     * Send generic email asynchronously
+     * Send email verification email
      * 
-     * @param to          Recipient email address
-     * @param subject     Email subject
-     * @param htmlContent HTML content of the email
-     * @return CompletableFuture with the result of the email sending operation
+     * @param to                recipient email address
+     * @param verificationToken email verification token
+     * @param username          user's username
      */
-    CompletableFuture<String> sendEmailAsync(String to, String subject, String htmlContent);
+    void sendEmailVerification(String to, String verificationToken, String username);
+
+    /**
+     * Send test preview email showing all templates
+     * 
+     * @param to       recipient email address
+     * @param username user's username
+     */
+    void sendTestPreviewEmail(String to, String username);
 }

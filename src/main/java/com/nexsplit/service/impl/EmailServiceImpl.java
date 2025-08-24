@@ -1,288 +1,175 @@
 package com.nexsplit.service.impl;
 
 import com.nexsplit.service.EmailService;
-import com.nexsplit.util.StructuredLoggingUtil;
+import com.nexsplit.util.LoggingUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Async;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
+import org.thymeleaf.TemplateEngine;
+import org.thymeleaf.context.Context;
 
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
+import jakarta.mail.MessagingException;
+import jakarta.mail.internet.MimeMessage;
+import java.util.Map;
 
 /**
- * Email service implementation with async operations
- * Uses virtual threads for better scalability and performance
+ * Implementation of EmailService for sending emails
  */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class EmailServiceImpl implements EmailService {
 
-    @Value("${app.email.from:noreply@nexsplit.com}")
+    private final JavaMailSender mailSender;
+    private final TemplateEngine templateEngine;
+
+    @Value("${spring.mail.username}")
     private String fromEmail;
 
-    @Value("${app.email.from-name:NexSplit}")
+    @Value("${MAIL_FROM_NAME:NexSplit}")
     private String fromName;
 
-    @Value("${app.email.base-url:http://localhost:8080}")
-    private String baseUrl;
+    @Value("${app.base-url:http://localhost:8080}")
+    private String appBaseUrl;
 
-    /**
-     * Send password reset email asynchronously
-     * 
-     * BENEFITS:
-     * - Non-blocking operation (user gets immediate response)
-     * - SMTP operations run in virtual thread
-     * - Comprehensive logging and monitoring
-     * - Error handling with fallback
-     */
-    @Async("asyncExecutor")
     @Override
-    public CompletableFuture<String> sendPasswordResetEmailAsync(String email, int resetToken, String username) {
+    public void sendSimpleEmail(String to, String subject, String text) {
         try {
-            log.info("Starting to send password reset email to: {}", email);
+            log.info("Sending simple email to: {}", LoggingUtil.maskEmail(to));
 
-            // Simulate SMTP operation (I/O-bound)
-            TimeUnit.MILLISECONDS.sleep(500);
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
-            // Generate email content
-            String subject = "Password Reset Request - NexSplit";
-            String htmlContent = generatePasswordResetEmailContent(username, resetToken);
+            helper.setFrom(fromEmail);
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(text, false); // Plain text
 
-            // TODO: Replace with actual SMTP implementation
-            // JavaMailSender.send(createMimeMessage(to, subject, htmlContent));
+            mailSender.send(message);
 
-            // Log the email sending event
-            StructuredLoggingUtil.logBusinessEvent(
-                    "EMAIL_SENT",
-                    email,
-                    "PASSWORD_RESET_EMAIL",
-                    "SUCCESS",
-                    java.util.Map.of(
-                            "subject", subject,
-                            "username", username,
-                            "thread", Thread.currentThread().getName()));
-
-            log.info("Password reset email sent successfully to: {}", email);
-            return CompletableFuture.completedFuture("Password reset email sent to " + email);
-
-        } catch (InterruptedException e) {
-            log.error("Failed to send password reset email to: {}", email, e);
-            return CompletableFuture.failedFuture(e);
+            log.info("Simple email sent successfully to: {}", LoggingUtil.maskEmail(to));
         } catch (Exception e) {
-            log.error("Failed to send password reset email to: {}", email, e);
-            return CompletableFuture.failedFuture(e);
+            log.error("Failed to send simple email to: {}", LoggingUtil.maskEmail(to), e);
+            throw new RuntimeException("Failed to send email", e);
         }
     }
 
-    /**
-     * Send welcome email asynchronously for new users
-     * 
-     * BENEFITS:
-     * - Non-blocking user registration flow
-     * - Personalized welcome message
-     * - Background email processing
-     */
-    @Async("asyncExecutor")
     @Override
-    public CompletableFuture<String> sendWelcomeEmailAsync(String email, String fullName) {
+    public void sendPasswordResetEmail(String to, String resetToken, String username) {
         try {
-            log.info("Starting to send welcome email to: {}", email);
+            log.info("Sending password reset email to: {}", LoggingUtil.maskEmail(to));
 
-            // Simulate SMTP operation (I/O-bound)
-            TimeUnit.MILLISECONDS.sleep(300);
+            String subject = "NexSplit - Password Reset Request";
 
-            // Generate email content
+            // Create Thymeleaf context
+            Context context = new Context();
+            context.setVariable("username", username);
+            context.setVariable("resetToken", resetToken);
+            context.setVariable("subject", subject);
+
+            // Process the template
+            String htmlContent = templateEngine.process("email/password-reset", context);
+
+            // Send the email
+            sendHtmlEmail(to, subject, htmlContent);
+
+        } catch (Exception e) {
+            log.error("Failed to send password reset email to: {}", LoggingUtil.maskEmail(to), e);
+            throw new RuntimeException("Failed to send password reset email", e);
+        }
+    }
+
+    @Override
+    public void sendWelcomeEmail(String to, String username) {
+        try {
+            log.info("Sending welcome email to: {}", LoggingUtil.maskEmail(to));
+
             String subject = "Welcome to NexSplit!";
-            String htmlContent = generateWelcomeEmailContent(fullName);
 
-            // TODO: Replace with actual SMTP implementation
-            // JavaMailSender.send(createMimeMessage(to, subject, htmlContent));
+            // Create Thymeleaf context
+            Context context = new Context();
+            context.setVariable("username", username);
+            context.setVariable("subject", subject);
 
-            // Log the email sending event
-            StructuredLoggingUtil.logBusinessEvent(
-                    "EMAIL_SENT",
-                    email,
-                    "WELCOME_EMAIL",
-                    "SUCCESS",
-                    java.util.Map.of(
-                            "subject", subject,
-                            "fullName", fullName,
-                            "thread", Thread.currentThread().getName()));
+            // Process the template
+            String htmlContent = templateEngine.process("email/welcome", context);
 
-            log.info("Welcome email sent successfully to: {}", email);
-            return CompletableFuture.completedFuture("Welcome email sent to " + email);
+            // Send the email
+            sendHtmlEmail(to, subject, htmlContent);
 
-        } catch (InterruptedException e) {
-            log.error("Failed to send welcome email to: {}", email, e);
-            return CompletableFuture.failedFuture(e);
         } catch (Exception e) {
-            log.error("Failed to send welcome email to: {}", email, e);
-            return CompletableFuture.failedFuture(e);
+            log.error("Failed to send welcome email to: {}", LoggingUtil.maskEmail(to), e);
+            throw new RuntimeException("Failed to send welcome email", e);
         }
     }
 
-    /**
-     * Send email confirmation asynchronously
-     * 
-     * BENEFITS:
-     * - Non-blocking email confirmation flow
-     * - Secure token-based confirmation
-     * - Background processing
-     */
-    @Async("asyncExecutor")
     @Override
-    public CompletableFuture<String> sendEmailConfirmationAsync(String email, String confirmationToken,
-            String username) {
+    public void sendEmailVerification(String to, String verificationToken, String username) {
         try {
-            log.info("Starting to send email confirmation to: {}", email);
+            log.info("Sending email verification to: {}", LoggingUtil.maskEmail(to));
 
-            // Simulate SMTP operation (I/O-bound)
-            TimeUnit.MILLISECONDS.sleep(400);
+            String subject = "Verify Your Email - NexSplit";
 
-            // Generate email content
-            String subject = "Confirm Your Email - NexSplit";
-            String htmlContent = generateEmailConfirmationContent(username, confirmationToken);
+            // Create Thymeleaf context
+            Context context = new Context();
+            context.setVariable("username", username);
+            context.setVariable("verificationToken", verificationToken);
+            context.setVariable("subject", subject);
+            context.setVariable("appBaseUrl", appBaseUrl);
 
-            // TODO: Replace with actual SMTP implementation
-            // JavaMailSender.send(createMimeMessage(to, subject, htmlContent));
+            // Process the template
+            String htmlContent = templateEngine.process("email/email-verification", context);
 
-            // Log the email sending event
-            StructuredLoggingUtil.logBusinessEvent(
-                    "EMAIL_SENT",
-                    email,
-                    "EMAIL_CONFIRMATION",
-                    "SUCCESS",
-                    java.util.Map.of(
-                            "subject", subject,
-                            "username", username,
-                            "thread", Thread.currentThread().getName()));
+            // Send the email
+            sendHtmlEmail(to, subject, htmlContent);
 
-            log.info("Email confirmation sent successfully to: {}", email);
-            return CompletableFuture.completedFuture("Email confirmation sent to " + email);
-
-        } catch (InterruptedException e) {
-            log.error("Failed to send email confirmation to: {}", email, e);
-            return CompletableFuture.failedFuture(e);
         } catch (Exception e) {
-            log.error("Failed to send email confirmation to: {}", email, e);
-            return CompletableFuture.failedFuture(e);
+            log.error("Failed to send email verification to: {}", LoggingUtil.maskEmail(to), e);
+            throw new RuntimeException("Failed to send email verification", e);
         }
     }
 
-    /**
-     * Send generic email asynchronously
-     * 
-     * BENEFITS:
-     * - Flexible email sending for any purpose
-     * - Non-blocking operation
-     * - Custom HTML content support
-     */
-    @Async("asyncExecutor")
     @Override
-    public CompletableFuture<String> sendEmailAsync(String to, String subject, String htmlContent) {
+    public void sendTestPreviewEmail(String to, String username) {
         try {
-            log.info("Starting to send generic email to: {}", to);
+            log.info("Sending test preview email to: {}", LoggingUtil.maskEmail(to));
 
-            // Simulate SMTP operation (I/O-bound)
-            TimeUnit.MILLISECONDS.sleep(600);
+            String subject = "Email Template Preview - NexSplit";
 
-            // TODO: Replace with actual SMTP implementation
-            // JavaMailSender.send(createMimeMessage(to, subject, htmlContent));
+            // Create Thymeleaf context
+            Context context = new Context();
+            context.setVariable("username", username);
+            context.setVariable("subject", subject);
 
-            // Log the email sending event
-            StructuredLoggingUtil.logBusinessEvent(
-                    "EMAIL_SENT",
-                    to,
-                    "GENERIC_EMAIL",
-                    "SUCCESS",
-                    java.util.Map.of(
-                            "subject", subject,
-                            "thread", Thread.currentThread().getName()));
+            // Process the template
+            String htmlContent = templateEngine.process("email/test-preview", context);
 
-            log.info("Generic email sent successfully to: {}", to);
-            return CompletableFuture.completedFuture("Email sent to " + to);
+            // Send the email
+            sendHtmlEmail(to, subject, htmlContent);
 
-        } catch (InterruptedException e) {
-            log.error("Failed to send generic email to: {}", to, e);
-            return CompletableFuture.failedFuture(e);
         } catch (Exception e) {
-            log.error("Failed to send generic email to: {}", to, e);
-            return CompletableFuture.failedFuture(e);
+            log.error("Failed to send test preview email to: {}", LoggingUtil.maskEmail(to), e);
+            throw new RuntimeException("Failed to send test preview email", e);
         }
     }
 
     /**
-     * Generate password reset email content
+     * Send HTML email using Thymeleaf template
      */
-    private String generatePasswordResetEmailContent(String username, int resetToken) {
-        return String.format("""
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <title>Password Reset - NexSplit</title>
-                </head>
-                <body>
-                    <h2>Hello %s!</h2>
-                    <p>You requested a password reset for your NexSplit account.</p>
-                    <p>Your reset token is: <strong>%06d</strong></p>
-                    <p>This token will expire in 15 minutes.</p>
-                    <p>If you didn't request this reset, please ignore this email.</p>
-                    <p>Best regards,<br>The NexSplit Team</p>
-                </body>
-                </html>
-                """, username, resetToken);
-    }
+    private void sendHtmlEmail(String to, String subject, String htmlContent) throws MessagingException {
+        MimeMessage message = mailSender.createMimeMessage();
+        MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
-    /**
-     * Generate welcome email content
-     */
-    private String generateWelcomeEmailContent(String fullName) {
-        return String.format(
-                """
-                        <!DOCTYPE html>
-                        <html>
-                        <head>
-                            <meta charset="UTF-8">
-                            <title>Welcome to NexSplit!</title>
-                        </head>
-                        <body>
-                            <h2>Welcome to NexSplit, %s!</h2>
-                            <p>Thank you for joining NexSplit. We're excited to help you manage your expenses and split bills with friends and family.</p>
-                            <p>Get started by creating your first expense group and adding some expenses!</p>
-                            <p>If you have any questions, feel free to reach out to our support team.</p>
-                            <p>Best regards,<br>The NexSplit Team</p>
-                        </body>
-                        </html>
-                        """,
-                fullName);
-    }
+        helper.setFrom(fromEmail);
+        helper.setTo(to);
+        helper.setSubject(subject);
+        helper.setText(htmlContent, true); // HTML content
 
-    /**
-     * Generate email confirmation content
-     */
-    private String generateEmailConfirmationContent(String username, String confirmationToken) {
-        String confirmationUrl = baseUrl + "/api/v1/auth/confirm-email?token=" + confirmationToken;
+        mailSender.send(message);
 
-        return String.format("""
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <title>Confirm Your Email - NexSplit</title>
-                </head>
-                <body>
-                    <h2>Hello %s!</h2>
-                    <p>Please confirm your email address to complete your NexSplit registration.</p>
-                    <p><a href="%s">Click here to confirm your email</a></p>
-                    <p>Or copy and paste this link in your browser: %s</p>
-                    <p>This link will expire in 24 hours.</p>
-                    <p>Best regards,<br>The NexSplit Team</p>
-                </body>
-                </html>
-                """, username, confirmationUrl, confirmationUrl);
+        log.info("HTML email sent successfully to: {}", LoggingUtil.maskEmail(to));
     }
 }

@@ -8,6 +8,7 @@ NexSplit is a comprehensive expense tracking application that can track and mana
 - **Expense Tracking**: Track individual and shared expenses
 - **OAuth2 Integration**: Google OAuth2 authentication
 - **JWT Security**: Secure token-based authentication
+
 - **Structured Logging**: Comprehensive logging with correlation IDs
 - **Elasticsearch Integration**: Advanced log aggregation and search
 - **Kibana Dashboards**: Real-time monitoring and analytics
@@ -19,6 +20,7 @@ NexSplit is a comprehensive expense tracking application that can track and mana
 - **Backend**: Spring Boot 3.5.3 with Java 21
 - **Database**: PostgreSQL 15
 - **Security**: Spring Security with JWT
+
 - **Logging**: Logback with structured logging
 - **Monitoring**: Elasticsearch 8.11.0 + Kibana 8.11.0
 - **Containerization**: Docker & Docker Compose
@@ -38,7 +40,10 @@ Start the complete application with Elasticsearch and Kibana monitoring:
 
 ```powershell
 # Windows PowerShell
-.\start-elasticsearch.ps1
+.\scripts\start-elasticsearch.ps1
+
+# Linux/Mac
+./scripts/start-elasticsearch.sh
 
 # Or manually
 docker-compose up -d --build
@@ -50,7 +55,10 @@ Start just the application and database:
 
 ```powershell
 # Windows PowerShell
-.\start-dev.ps1
+.\scripts\start-dev.ps1
+
+# Linux/Mac
+./scripts/start-dev.sh
 
 # Or manually
 docker-compose -f docker-compose.yml up -d postgres nexsplit-app
@@ -109,17 +117,31 @@ git clone <repository-url>
 cd nexsplit
 
 # Set up environment variables
-cp env.development.template .env
-# Edit .env with your configuration
+cp env.development.template .env.development
+# Edit .env.development with your configuration
 
-# Run with Maven
+# Run with scripts (recommended)
+# Windows
+.\scripts\start-dev.ps1
+
+# Linux/Mac
+./scripts/start-dev.sh
+
+# Or run with Maven directly
 ./mvnw spring-boot:run
 ```
 
 ### Docker Development
 
 ```bash
-# Start development environment
+# Start development environment with monitoring
+# Windows
+.\scripts\start-elasticsearch.ps1
+
+# Linux/Mac
+./scripts/start-elasticsearch.sh
+
+# Or manually
 docker-compose up -d
 
 # View logs
@@ -200,10 +222,21 @@ curl http://localhost:9200/_cluster/health
 
 # Check Kibana status
 curl http://localhost:5601/api/status
+
+# Production deployment
+# Windows
+.\scripts\deploy-production.ps1 v1.0.0
+
+# Linux/Mac
+./scripts/deploy-production.sh v1.0.0
+
+# Build and push Docker image
+./scripts/build-and-push.sh v1.0.0
 ```
 
 ## Documentation
 
+- [Scripts Documentation](scripts/README.md) - Complete guide to all automation scripts
 - [Logging Guidelines](LOGGING_GUIDELINES.md)
 - [Kibana Dashboard Setup](doc/KIBANA_DASHBOARDS.md)
 - [Deployment Guide](doc/DEPLOYMENT_GUIDE.md)

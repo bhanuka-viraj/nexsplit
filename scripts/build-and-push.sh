@@ -31,6 +31,31 @@ DEFAULT_VERSION="latest"
 VERSION=${1:-$DEFAULT_VERSION}
 
 # ========================================
+# LOAD ENVIRONMENT VARIABLES (OPTIONAL)
+# ========================================
+echo "📋 Loading environment variables..."
+
+# Check if .env.production exists and load it (for build context)
+if [ -f ".env.production" ]; then
+    echo "✅ Found .env.production file"
+    
+    # Load variables from .env.production file
+    while IFS= read -r line; do
+        # Skip comments and empty lines
+        if [[ ! "$line" =~ ^[[:space:]]*# ]] && [[ -n "$line" ]]; then
+            if [[ "$line" =~ ^([^=]+)=(.*)$ ]]; then
+                name="${BASH_REMATCH[1]}"
+                value="${BASH_REMATCH[2]}"
+                export "$name=$value"
+                echo "   Set $name"
+            fi
+        fi
+    done < ".env.production"
+else
+    echo "⚠️  .env.production not found, using default values"
+fi
+
+# ========================================
 # SCRIPT EXECUTION
 # ========================================
 echo "🐳 Building and pushing NexSplit Docker image..."

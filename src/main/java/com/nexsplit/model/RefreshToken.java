@@ -52,9 +52,6 @@ public class RefreshToken {
     @Column(name = "used_at")
     private LocalDateTime usedAt;
 
-    @Column(name = "ip_address")
-    private String ipAddress; // Track IP for security
-
     @Column(name = "user_agent")
     private String userAgent; // Track user agent for security
 

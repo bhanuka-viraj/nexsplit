@@ -13,12 +13,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.nio.charset.StandardCharsets;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.util.concurrent.CompletableFuture;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -78,7 +80,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
      * Creates a new family for each login session
      */
     @Transactional
-    public String generateRefreshToken(String userId, String ipAddress, String userAgent) {
+    public String generateRefreshToken(String userId, String userAgent) {
         // Generate unique token
         String tokenValue = UUID.randomUUID().toString();
         String tokenHash = createTokenHash(tokenValue); // Use deterministic hash
@@ -93,7 +95,6 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
                 .userId(userId)
                 .familyId(familyId)
                 .expiresAt(LocalDateTime.now().plusDays(refreshTokenExpirationDays))
-                .ipAddress(ipAddress)
                 .userAgent(userAgent)
                 .build();
 
@@ -167,7 +168,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
 
         // Generate new refresh token (token rotation) - SAME FAMILY
         String newRefreshToken = generateRefreshTokenInSameFamily(refreshToken.getUserId(),
-                refreshToken.getFamilyId(), ipAddress, userAgent);
+                refreshToken.getFamilyId(), userAgent);
 
         log.info("Token refreshed successfully for user: {} (email: {})", refreshToken.getUserId(), user.getEmail());
 
@@ -175,7 +176,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
         auditService.logAuthenticationEventAsync(
                 refreshToken.getUserId(),
                 "TOKEN_REFRESH",
-                refreshToken.getIpAddress(),
+                ipAddress, // Use the current IP from method parameter
                 refreshToken.getUserAgent(),
                 "Access token refreshed successfully");
 
@@ -185,8 +186,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     /**
      * Generate refresh token in the same family (for rotation)
      */
-    private String generateRefreshTokenInSameFamily(String userId, String familyId, String ipAddress,
-            String userAgent) {
+    private String generateRefreshTokenInSameFamily(String userId, String familyId, String userAgent) {
         String tokenValue = UUID.randomUUID().toString();
         String tokenHash = createTokenHash(tokenValue); // Use deterministic hash
 
@@ -196,7 +196,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
                 .userId(userId)
                 .familyId(familyId) // Same family for rotation
                 .expiresAt(LocalDateTime.now().plusDays(refreshTokenExpirationDays))
-                .ipAddress(ipAddress)
+
                 .userAgent(userAgent)
                 .build();
 
@@ -330,20 +330,18 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
      * @return true if suspicious activity detected, false otherwise
      */
     private boolean isSuspiciousActivity(RefreshToken token, String currentIp, String currentUserAgent) {
-        // Check if IP address changed significantly
-        if (token.getIpAddress() != null && currentIp != null) {
-            if (!token.getIpAddress().equals(currentIp)) {
-                // Could be legitimate (user moved) but worth logging
-                log.warn("IP address changed for refresh token: {} -> {}",
-                        token.getIpAddress(), currentIp);
-            }
+        // Log IP address for audit purposes (but don't block on changes)
+        if (currentIp != null) {
+            log.debug("Refresh token used from IP: {} for user: {}", currentIp, token.getUserId());
         }
 
-        // Check if user agent changed
+        // Check if user agent changed (more reliable indicator)
         if (token.getUserAgent() != null && currentUserAgent != null) {
             if (!token.getUserAgent().equals(currentUserAgent)) {
                 log.warn("User agent changed for refresh token: {} -> {}",
                         token.getUserAgent(), currentUserAgent);
+                // Consider this suspicious but don't block immediately
+                // Could be legitimate (browser update, different device)
             }
         }
 
@@ -383,22 +381,61 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
      * - This allows detection of expired token abuse
      * - Trade-off: Slightly larger database size
      * 
-     * @see #cleanupExpiredTokens() for manual cleanup
+     * @see #cleanupExpiredTokensAsync() for manual cleanup
      */
     @Scheduled(cron = "0 0 2 * * ?") // Daily at 2:00 AM
-    @Transactional
     public void scheduledCleanupExpiredTokens() {
-        try {
-            log.info("Starting scheduled cleanup of expired refresh tokens...");
-            cleanupExpiredTokens();
-            log.info("Scheduled cleanup completed successfully");
-        } catch (Exception e) {
-            log.error("Error during scheduled cleanup: {}", e.getMessage(), e);
-        }
+        // Fire and forget - doesn't block the scheduled thread
+        cleanupExpiredTokensAsync()
+                .exceptionally(throwable -> {
+                    log.error("Error during scheduled cleanup: {}", throwable.getMessage(), throwable);
+                    return null;
+                });
     }
 
     /**
-     * Clean up expired tokens (manual or scheduled)
+     * Clean up expired tokens (manual or scheduled) - ASYNC VERSION
+     * 
+     * BENEFITS:
+     * - Non-blocking operation using virtual threads
+     * - Better resource utilization
+     * - Improved application responsiveness
+     * 
+     * CURRENT IMPLEMENTATION: Deletes all expired tokens immediately
+     * This means theft of expired tokens cannot be detected.
+     * 
+     * SECURITY GAP: If a thief steals an expired token and tries to use it:
+     * 1. Token not found in database (already deleted)
+     * 2. System returns "Invalid token"
+     * 3. No theft detection possible
+     * 4. Family compromise not detected
+     * 
+     * RECOMMENDED ENHANCEMENT: Keep expired tokens for 24 hours:
+     * ```java
+     * LocalDateTime securityCutoff = LocalDateTime.now().minusHours(24);
+     * refreshTokenRepository.deleteExpiredTokens(securityCutoff);
+     * ```
+     * 
+     * This would allow detection of expired token abuse while still maintaining
+     * regular cleanup for database performance.
+     */
+    @Async("asyncExecutor")
+    @Transactional
+    public CompletableFuture<Void> cleanupExpiredTokensAsync() {
+        return CompletableFuture.runAsync(() -> {
+            try {
+                log.info("Starting cleanup of expired refresh tokens...");
+                refreshTokenRepository.deleteExpiredTokens(LocalDateTime.now());
+                log.info("Cleanup of expired refresh tokens completed successfully");
+            } catch (Exception e) {
+                log.error("Error during cleanup: {}", e.getMessage(), e);
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    /**
+     * Clean up expired tokens (manual or scheduled) - SYNC VERSION
      * 
      * CURRENT IMPLEMENTATION: Deletes all expired tokens immediately
      * This means theft of expired tokens cannot be detected.
