@@ -2,6 +2,7 @@ package com.nexsplit.controller;
 
 import com.nexsplit.dto.auth.AuthResponse;
 import com.nexsplit.dto.auth.LoginRequest;
+import com.nexsplit.dto.auth.OAuth2TokenRequest;
 import com.nexsplit.dto.auth.RefreshTokenRequest;
 import com.nexsplit.dto.auth.RefreshTokenResponse;
 import com.nexsplit.dto.user.UserDto;
@@ -9,6 +10,8 @@ import com.nexsplit.exception.SecurityException;
 import com.nexsplit.exception.UserNotFoundException;
 import com.nexsplit.model.User;
 import com.nexsplit.service.AuditService;
+import com.nexsplit.service.EmailService;
+import com.nexsplit.service.OAuth2Service;
 import com.nexsplit.service.impl.RefreshTokenServiceImpl;
 import com.nexsplit.service.impl.UserServiceImpl;
 import com.nexsplit.config.ApiConfig;
@@ -49,94 +52,62 @@ public class AuthController {
         private final RefreshTokenServiceImpl refreshTokenServiceImpl;
         private final JwtUtil jwtUtil;
         private final AuditService auditService;
+        private final OAuth2Service oauth2Service;
+        private final EmailService emailService;
 
         public AuthController(UserServiceImpl userServiceImpl, RefreshTokenServiceImpl refreshTokenServiceImpl,
-                        JwtUtil jwtUtil, AuditService auditService) {
+                        JwtUtil jwtUtil, AuditService auditService, OAuth2Service oauth2Service,
+                        EmailService emailService) {
                 this.userServiceImpl = userServiceImpl;
                 this.refreshTokenServiceImpl = refreshTokenServiceImpl;
                 this.jwtUtil = jwtUtil;
                 this.auditService = auditService;
+                this.oauth2Service = oauth2Service;
+                this.emailService = emailService;
         }
 
-        @GetMapping("/oauth-login")
-        @Operation(summary = "OAuth2 Login Callback", description = "Callback endpoint for Google OAuth2 authentication. This endpoint is called by Spring Security after successful OAuth2 authentication.", responses = {
-                        @ApiResponse(responseCode = "200", description = "OAuth2 login successful", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AuthResponse.class), examples = @ExampleObject(name = "Successful OAuth2 Login", value = """
-                                        {
-                                          "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                                          "tokenType": "Bearer",
-                                          "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                                          "expiresIn": 900,
-                                          "email": "user@gmail.com",
-                                          "fullName": "John Doe"
-                                        }
-                                        """))),
-                        @ApiResponse(responseCode = "401", description = "OAuth2 authentication failed")
+        @PostMapping("/oauth2/verify")
+        @Operation(summary = "OAuth2 Token Exchange", description = "Verify Google OAuth2 token and return JWT tokens. Used by mobile apps and web apps that handle OAuth2 on the frontend.", requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "OAuth2 token exchange request", required = true, content = @Content(mediaType = "application/json", schema = @Schema(implementation = OAuth2TokenRequest.class), examples = @ExampleObject(name = "OAuth2 Token Exchange", value = """
+                        {
+                          "googleToken": "ya29.a0AfB_byC..."
+                        }
+                        """))), responses = {
+                        @ApiResponse(responseCode = "200", description = "OAuth2 token verification successful", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AuthResponse.class))),
+                        @ApiResponse(responseCode = "400", description = "Invalid request data"),
+                        @ApiResponse(responseCode = "401", description = "Invalid Google OAuth2 token")
         })
-        public ResponseEntity<AuthResponse> oauthLogin(@AuthenticationPrincipal OidcUser oidcUser,
-                        HttpServletRequest request, HttpServletResponse response) {
-                User user = userServiceImpl.processOAuthUser(oidcUser);
-                String accessToken = userServiceImpl.generateAccessToken(user);
+        public ResponseEntity<AuthResponse> verifyOAuth2Token(@Valid @RequestBody OAuth2TokenRequest request,
+                        HttpServletRequest httpRequest, HttpServletResponse response) {
+                try {
+                        // Get client IP address for security tracking
+                        String ipAddress = getClientIpAddress(httpRequest);
+                        String userAgent = httpRequest.getHeader("User-Agent");
 
-                // Get client information for security tracking
-                String ipAddress = getClientIpAddress(request);
-                String userAgent = request.getHeader("User-Agent");
+                        // Verify OAuth2 token and get JWT tokens
+                        AuthResponse authResponse = oauth2Service.verifyOAuth2Token(request, ipAddress, userAgent);
 
-                // Start parallel operations
-                CompletableFuture<String> refreshTokenFuture = CompletableFuture.supplyAsync(() -> {
-                        return refreshTokenServiceImpl.generateRefreshToken(user.getId(), userAgent);
-                });
+                        // Set refresh token as a secure cookie
+                        ResponseCookie refreshCookie = ResponseCookie
+                                        .from("refreshToken", authResponse.getRefreshToken())
+                                        .httpOnly(true)
+                                        .secure(true)
+                                        .path(ApiConfig.API_BASE_PATH)
+                                        .maxAge(Duration.ofDays(7))
+                                        .sameSite("Strict")
+                                        .build();
 
-                CompletableFuture<Void> auditFuture = CompletableFuture.runAsync(() -> {
-                        auditService.logAuthenticationEventAsync(user.getId(), "OAUTH_LOGIN_SUCCESS", ipAddress,
-                                        userAgent, "OAuth login successful");
-                });
+                        response.setHeader(HttpHeaders.SET_COOKIE, refreshCookie.toString());
 
-                // Wait for refresh token (we need it for response)
-                String refreshToken = refreshTokenFuture.join();
+                        log.info("OAuth2 token verification successful");
+                        return ResponseEntity.ok(authResponse);
 
-                // Continue with non-blocking operations
-                auditFuture.exceptionally(throwable -> {
-                        log.error("Failed to log OAuth login audit event: {}", throwable.getMessage());
-                        return null;
-                });
-
-                // Log business event for Elasticsearch
-                StructuredLoggingUtil.logBusinessEvent(
-                                "OAUTH_LOGIN",
-                                user.getEmail(),
-                                "AUTHENTICATE",
-                                "SUCCESS",
-                                Map.of(
-                                                "source", "OAUTH_GOOGLE",
-                                                "ipAddress", ipAddress,
-                                                "userAgent", userAgent,
-                                                "userType",
-                                                user.getCreatedAt().equals(user.getModifiedAt()) ? "NEW_USER"
-                                                                : "EXISTING_USER"));
-
-                log.info("OAuth2 login successful for user: {}", LoggingUtil.maskEmail(user.getEmail()));
-
-                // Set refresh token as a cookie
-                ResponseCookie refreshCookie = ResponseCookie.from("refreshToken", refreshToken)
-                                .httpOnly(true)
-                                .secure(true)
-                                .path(ApiConfig.API_BASE_PATH)
-                                .maxAge(Duration.ofDays(7))
-                                .sameSite("Strict")
-                                .build();
-
-                response.setHeader(HttpHeaders.SET_COOKIE, refreshCookie.toString());
-
-                AuthResponse authResponse = AuthResponse.builder()
-                                .accessToken(accessToken)
-                                .tokenType("Bearer")
-                                .refreshToken(refreshToken)
-                                .expiresIn(900L) // 15 minutes
-                                .email(user.getEmail())
-                                .fullName(user.getFullName())
-                                .build();
-
-                return ResponseEntity.ok(authResponse);
+                } catch (Exception e) {
+                        log.error("OAuth2 token verification failed: {}", e.getMessage(), e);
+                        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                                        .body(AuthResponse.builder()
+                                                        .error("OAuth2 token verification failed")
+                                                        .build());
+                }
         }
 
         @PostMapping("/register")
@@ -752,6 +723,63 @@ public class AuthController {
                 }
 
                 return request.getRemoteAddr();
+        }
+
+        @PostMapping("/test-email")
+        @Operation(summary = "Test Email Configuration", description = "Send a test email to verify email configuration is working correctly", requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "Test email request", required = true, content = @Content(mediaType = "application/json", schema = @Schema(implementation = Map.class), examples = @ExampleObject(name = "Test Email", value = """
+                        {
+                          "email": "test@example.com"
+                        }
+                        """))), responses = {
+                        @ApiResponse(responseCode = "200", description = "Test email sent successfully"),
+                        @ApiResponse(responseCode = "400", description = "Invalid email address"),
+                        @ApiResponse(responseCode = "500", description = "Email sending failed")
+        })
+        public ResponseEntity<Map<String, Object>> testEmail(@RequestBody Map<String, String> request,
+                        HttpServletRequest httpRequest) {
+                try {
+                        String email = request.get("email");
+                        if (email == null || email.trim().isEmpty()) {
+                                return ResponseEntity.badRequest().body(Map.of(
+                                                "success", false,
+                                                "message", "Email address is required"));
+                        }
+
+                        // Validate email format
+                        String emailRegex = "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$";
+                        if (!email.matches(emailRegex)) {
+                                return ResponseEntity.badRequest().body(Map.of(
+                                                "success", false,
+                                                "message",
+                                                "Invalid email format. Please provide a valid email address."));
+                        }
+
+                        // Send simple test email instead of preview email
+                        emailService.sendSimpleEmail(email, "Test Email from AuthController",
+                                        "This is a test email from the AuthController to verify email functionality is working correctly.");
+
+                        // Log the test email attempt
+                        auditService.logUserActionAsync(
+                                        email,
+                                        "EMAIL_TEST_SENT",
+                                        "Test email sent to " + LoggingUtil.maskEmail(email) + " from "
+                                                        + getClientIpAddress(httpRequest));
+
+                        log.info("Test email sent successfully to: {}", LoggingUtil.maskEmail(email));
+
+                        return ResponseEntity.ok(Map.of(
+                                        "success", true,
+                                        "message", "Test email sent successfully",
+                                        "data", Map.of(
+                                                        "email", LoggingUtil.maskEmail(email))));
+
+                } catch (Exception e) {
+                        log.error("Test email failed: {}", e.getMessage(), e);
+                        return ResponseEntity.internalServerError().body(Map.of(
+                                        "success", false,
+                                        "message", "Failed to send test email: " + e.getMessage(),
+                                        "error", "EMAIL_SEND_FAILED"));
+                }
         }
 
 }

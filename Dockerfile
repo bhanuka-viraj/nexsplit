@@ -50,10 +50,15 @@ WORKDIR /app
 # This is the only artifact we need from the build stage
 COPY --from=build /app/target/*.jar app.jar
 
+# Copy the entrypoint script
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+
 # Create logs directory and set proper ownership
 # This ensures the application can write logs
 RUN mkdir -p /app/logs && \
-    chown -R appuser:appgroup /app
+    chown -R appuser:appgroup /app && \
+    chmod 755 /app/logs && \
+    chmod +x /app/docker-entrypoint.sh
 
 # Switch to the non-root user for security
 USER appuser
@@ -72,5 +77,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1
 
 # Command to run when the container starts
-# This starts the Spring Boot application
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# This starts the Spring Boot application with proper setup
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

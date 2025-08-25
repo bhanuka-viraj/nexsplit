@@ -38,7 +38,11 @@ public class EmailServiceImpl implements EmailService {
     @Override
     public void sendSimpleEmail(String to, String subject, String text) {
         try {
-            log.info("Sending simple email to: {}", LoggingUtil.maskEmail(to));
+            log.info("Sending simple email to: {} with subject: '{}'", LoggingUtil.maskEmail(to), subject);
+            log.debug("Email configuration - From: {}, Host: {}", LoggingUtil.maskEmail(fromEmail),
+                    mailSender instanceof org.springframework.mail.javamail.JavaMailSenderImpl
+                            ? ((org.springframework.mail.javamail.JavaMailSenderImpl) mailSender).getHost()
+                            : "unknown");
 
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
@@ -48,12 +52,14 @@ public class EmailServiceImpl implements EmailService {
             helper.setSubject(subject);
             helper.setText(text, false); // Plain text
 
+            log.debug("MimeMessage created successfully, attempting to send...");
             mailSender.send(message);
 
             log.info("Simple email sent successfully to: {}", LoggingUtil.maskEmail(to));
         } catch (Exception e) {
-            log.error("Failed to send simple email to: {}", LoggingUtil.maskEmail(to), e);
-            throw new RuntimeException("Failed to send email", e);
+            log.error("Failed to send simple email to: {} - Error: {} - Type: {}",
+                    LoggingUtil.maskEmail(to), e.getMessage(), e.getClass().getSimpleName(), e);
+            throw new RuntimeException("Failed to send email: " + e.getMessage(), e);
         }
     }
 
@@ -157,19 +163,55 @@ public class EmailServiceImpl implements EmailService {
     }
 
     /**
-     * Send HTML email using Thymeleaf template
+     * Send HTML email using Thymeleaf template with retry logic
      */
     private void sendHtmlEmail(String to, String subject, String htmlContent) throws MessagingException {
-        MimeMessage message = mailSender.createMimeMessage();
-        MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+        int maxRetries = 3;
+        int retryCount = 0;
 
-        helper.setFrom(fromEmail);
-        helper.setTo(to);
-        helper.setSubject(subject);
-        helper.setText(htmlContent, true); // HTML content
+        log.debug("Preparing to send HTML email to: {} with subject: '{}'", LoggingUtil.maskEmail(to), subject);
 
-        mailSender.send(message);
+        while (retryCount < maxRetries) {
+            try {
+                log.debug("Creating MimeMessage for HTML email (attempt {}/{})", retryCount + 1, maxRetries);
 
-        log.info("HTML email sent successfully to: {}", LoggingUtil.maskEmail(to));
+                MimeMessage message = mailSender.createMimeMessage();
+                MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+                helper.setFrom(fromEmail);
+                helper.setTo(to);
+                helper.setSubject(subject);
+                helper.setText(htmlContent, true); // HTML content
+
+                log.debug("MimeMessage created successfully, attempting to send HTML email...");
+                mailSender.send(message);
+
+                log.info("HTML email sent successfully to: {} (attempt {})", LoggingUtil.maskEmail(to), retryCount + 1);
+                return; // Success, exit retry loop
+
+            } catch (Exception e) {
+                retryCount++;
+                log.warn("Failed to send HTML email to: {} (attempt {}/{}): {} - Type: {}",
+                        LoggingUtil.maskEmail(to), retryCount, maxRetries, e.getMessage(),
+                        e.getClass().getSimpleName());
+
+                if (retryCount >= maxRetries) {
+                    log.error("All retry attempts failed for HTML email to: {} - Final error: {}",
+                            LoggingUtil.maskEmail(to), e.getMessage(), e);
+                    throw new MessagingException(
+                            "Failed to send HTML email after " + maxRetries + " attempts: " + e.getMessage(), e);
+                }
+
+                // Wait before retrying (exponential backoff)
+                try {
+                    long delay = 1000 * retryCount; // 1s, 2s, 3s delays
+                    log.debug("Waiting {}ms before retry attempt {}", delay, retryCount + 1);
+                    Thread.sleep(delay);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new MessagingException("HTML email sending interrupted", ie);
+                }
+            }
+        }
     }
 }

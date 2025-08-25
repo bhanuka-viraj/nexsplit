@@ -25,16 +25,36 @@ spring:
       client:
         registration:
           google:
-            client-id: ${GOOGLE_CLIENT_ID:google-client-id}
-            client-secret: ${GOOGLE_CLIENT_SECRET:google-client-secret}
+            client-id: ${GOOGLE_CLIENT_ID:955647643161-dqj4r98b1oqo2relf3c7mmlnme55b064.apps.googleusercontent.com}
+            client-secret: ${GOOGLE_CLIENT_SECRET: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}
             scope: profile,email
-            redirect-uri: http://localhost:8080/login/oauth2/code/google
+            redirect-uri: ${OAUTH2_REDIRECT_URI:http://localhost:8080/login/oauth2/code/google}
         provider:
           google:
             authorization-uri: https://accounts.google.com/o/oauth2/auth
             token-uri: https://oauth2.googleapis.com/token
             user-info-uri: https://www.googleapis.com/oauth2/v3/userinfo
             user-name-attribute: email
+
+  # ========================================
+  # EMAIL CONFIGURATION
+  # ========================================
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:nexsplit.mail@gmail.com}
+    password: ${MAIL_PASSWORD:mplpwfxipmngldqz}
+    default-encoding: UTF-8
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+      mail.smtp.starttls.required: true
+      mail.smtp.ssl.trust: smtp.gmail.com
+      mail.smtp.ssl.protocols: TLSv1.2
+      mail.smtp.connectiontimeout: 60000
+      mail.smtp.timeout: 60000
+      mail.smtp.writetimeout: 60000
+      mail.debug: true
 
 server:
   port: 8080
@@ -89,57 +109,43 @@ logging:
     org.elasticsearch: WARN
     org.apache.http: WARN
 
-
-  pattern:
-    # Kibana-friendly log pattern with correlation ID
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{correlationId}] %logger{36} - %msg%n"
-    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{correlationId}] %logger{36} - %msg%n"
-  level:
-    # Application logging - INFO for production, DEBUG for development
-    com.nexsplit: INFO
-    # Security logging - WARN for production to reduce noise
-    org.springframework.security: WARN
-    # Performance logging
-    com.nexsplit.aspect.LoggingAspect: DEBUG
-    # Database logging - WARN for production
-    org.hibernate.SQL: WARN
-    org.hibernate.type.descriptor.sql.BasicBinder: WARN
-    # Structured logging
-    com.nexsplit.util.StructuredLoggingUtil: INFO
-  cors:
-    # Allow credentials (cookies, authorization headers)
-    allow-credentials: true
-    # Allowed origins for CORS
-    allowed-origins:
-      - http://localhost:3000
-      - http://127.0.0.1:3000
-      - http://localhost:8080
-      - http://127.0.0.1:8080
-    # Allowed HTTP methods
-    allowed-methods:
-      - GET
-      - POST
-      - PUT
-      - PATCH
-      - DELETE
-      - OPTIONS
-    # Allowed headers
-    allowed-headers:
-      - Authorization
-      - Origin
-      - Content-Type
-      - Accept
-      - Accept-Encoding
-      - Accept-Language
-      - Access-Control-Allow-Origin
-      - Access-Control-Allow-Headers
-      - Access-Control-Request-Method
-      - X-Requested-With
-      - X-Auth-Token
-      - X-Xsrf-Token
-      - Cache-Control
-      - Id-Token
-      - X-Correlation-ID
+# ========================================
+# CORS CONFIGURATION
+# ========================================
+cors:
+  # Allow credentials (cookies, authorization headers)
+  allow-credentials: true
+  # Allowed origins for CORS
+  allowed-origins:
+    - http://localhost:3000
+    - http://127.0.0.1:3000
+    - http://localhost:8080
+    - http://127.0.0.1:8080
+  # Allowed HTTP methods
+  allowed-methods:
+    - GET
+    - POST
+    - PUT
+    - PATCH
+    - DELETE
+    - OPTIONS
+  # Allowed headers
+  allowed-headers:
+    - Authorization
+    - Origin
+    - Content-Type
+    - Accept
+    - Accept-Encoding
+    - Accept-Language
+    - Access-Control-Allow-Origin
+    - Access-Control-Allow-Headers
+    - Access-Control-Request-Method
+    - X-Requested-With
+    - X-Auth-Token
+    - X-Xsrf-Token
+    - Cache-Control
+    - Id-Token
+    - X-Correlation-ID
 
 # ========================================
 # SWAGGER/OPENAPI CONFIGURATION

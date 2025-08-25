@@ -14,7 +14,7 @@ CREATE TABLE users (
     first_name VARCHAR(100),
     last_name VARCHAR(100),
     username VARCHAR(255) NOT NULL,
-    contact_number VARCHAR(20) NOT NULL,
+    contact_number VARCHAR(20),
     last_validation_code INTEGER DEFAULT 0,
     is_email_validate BOOLEAN DEFAULT FALSE,
     is_google_auth BOOLEAN DEFAULT FALSE,

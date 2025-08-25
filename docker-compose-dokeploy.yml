@@ -1,0 +1,188 @@
+version: "3.8"
+
+services:
+  # ========================================
+  # ELASTICSEARCH SERVICE
+  # ========================================
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: nexsplit-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - cluster.name=nexsplit-cluster
+      - node.name=nexsplit-node
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - nexsplit-network
+    healthcheck:
+      test:
+        ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ========================================
+  # KIBANA SERVICE
+  # ========================================
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: nexsplit-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - SERVER_NAME=nexsplit-kibana
+      - SERVER_HOST=0.0.0.0
+      - XPACK_SECURITY_ENABLED=false
+      - XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - nexsplit-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  # ========================================
+  # FILEBEAT SERVICE
+  # ========================================
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.11.0
+    container_name: nexsplit-filebeat
+    user: root
+    command: >
+      bash -c "
+        echo 'filebeat.inputs:' > /usr/share/filebeat/filebeat.yml &&
+        echo '  - type: container' >> /usr/share/filebeat/filebeat.yml &&
+        echo '    paths:' >> /usr/share/filebeat/filebeat.yml &&
+        echo '      - '/var/lib/docker/containers/*/*.log'' >> /usr/share/filebeat/filebeat.yml &&
+        echo '    processors:' >> /usr/share/filebeat/filebeat.yml &&
+        echo '      - add_docker_metadata:' >> /usr/share/filebeat/filebeat.yml &&
+        echo '          host: \"unix:///var/run/docker.sock\"' >> /usr/share/filebeat/filebeat.yml &&
+        echo '      - decode_json_fields:' >> /usr/share/filebeat/filebeat.yml &&
+        echo '          fields: [\"message\"]' >> /usr/share/filebeat/filebeat.yml &&
+        echo '          target: \"json\"' >> /usr/share/filebeat/filebeat.yml &&
+        echo '          overwrite_keys: true' >> /usr/share/filebeat/filebeat.yml &&
+        echo '    fields:' >> /usr/share/filebeat/filebeat.yml &&
+        echo '      application: nexsplit' >> /usr/share/filebeat/filebeat.yml &&
+        echo '      environment: production' >> /usr/share/filebeat/filebeat.yml &&
+        echo '      log_type: structured' >> /usr/share/filebeat/filebeat.yml &&
+        echo '    fields_under_root: true' >> /usr/share/filebeat/filebeat.yml &&
+        echo 'output.elasticsearch:' >> /usr/share/filebeat/filebeat.yml &&
+        echo '  hosts: [\"elasticsearch:9200\"]' >> /usr/share/filebeat/filebeat.yml &&
+        echo '  protocol: \"http\"' >> /usr/share/filebeat/filebeat.yml &&
+        echo '  indices:' >> /usr/share/filebeat/filebeat.yml &&
+        echo '    - index: \"nexsplit-structured-%{+yyyy.MM.dd}\"' >> /usr/share/filebeat/filebeat.yml &&
+        echo '      when.contains:' >> /usr/share/filebeat/filebeat.yml &&
+        echo '        log_type: \"structured\"' >> /usr/share/filebeat/filebeat.yml &&
+        echo 'setup.kibana:' >> /usr/share/filebeat/filebeat.yml &&
+        echo '  host: \"kibana:5601\"' >> /usr/share/filebeat/filebeat.yml &&
+        echo 'setup.dashboards.enabled: true' >> /usr/share/filebeat/filebeat.yml &&
+        echo 'setup.template.enabled: true' >> /usr/share/filebeat/filebeat.yml &&
+        echo 'logging.level: info' >> /usr/share/filebeat/filebeat.yml &&
+        chmod 644 /usr/share/filebeat/filebeat.yml &&
+        filebeat -e
+      "
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - nexsplit-network
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep filebeat || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ========================================
+  # POSTGRESQL DATABASE SERVICE
+  # ========================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: nexsplit-postgres
+    environment:
+      POSTGRES_DB: nexsplit
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-Viraj@2002}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./src/main/resources/db/migration:/docker-entrypoint-initdb.d
+    networks:
+      - nexsplit-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d nexsplit"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  nexsplit-app:
+    image: bhanukaviraj/nexsplit:latest
+    container_name: nexsplit-app
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/nexsplit
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-Viraj@2002}
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-key-for-local-development-only}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-60}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-955647643161-dqj4r98b1oqo2relf3c7mmlnme55b064.apps.googleusercontent.com}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-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}
+      OAUTH2_REDIRECT_URI: ${OAUTH2_REDIRECT_URI:-http://localhost:8080/login/oauth2/code/google}
+      # Email Configuration
+      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-nexsplit.mail@gmail.com}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-mplpwfxipmngldqz}
+      SPRING_PROFILES_ACTIVE: docker
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - nexsplit-network
+    # Logs are stored inside the container
+    # volumes:
+    #   - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/actuator/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  postgres_data:
+  elasticsearch_data:
+
+networks:
+  nexsplit-network:
+    driver: bridge

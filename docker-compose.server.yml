@@ -128,7 +128,7 @@ services:
       - nexsplit-network # Same network as database and elasticsearch
     # Volume mappings
     volumes:
-      - ./logs:/app/logs # Map local logs directory to container logs
+      # - ./logs:/app/logs # Map local logs directory to container logs
     # Restart policy
     restart: unless-stopped # Restart unless manually stopped
     # Health check for application

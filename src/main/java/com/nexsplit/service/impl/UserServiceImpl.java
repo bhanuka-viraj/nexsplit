@@ -42,8 +42,13 @@ public class UserServiceImpl implements UserService {
     public User processOAuthUser(OidcUser oidcUser) {
         String email = oidcUser.getEmail();
         String fullName = oidcUser.getFullName() != null ? oidcUser.getFullName() : "Unknown";
-        String baseUsername = oidcUser.getPreferredUsername() != null ? oidcUser.getPreferredUsername()
-                : email.split("@")[0];
+        return processOAuthUserByEmail(email, fullName);
+    }
+
+    @Override
+    @Transactional
+    public User processOAuthUserByEmail(String email, String fullName) {
+        String baseUsername = email.split("@")[0];
 
         // Generate unique username
         String username = generateUniqueUsername(baseUsername);
@@ -58,12 +63,12 @@ public class UserServiceImpl implements UserService {
                             .isGoogleAuth(true)
                             .isEmailValidate(true)
                             .build();
-                    newUser.setFullName(fullName);
+                    newUser.setFullName(fullName != null ? fullName : "Unknown");
                     return userRepository.save(newUser);
                 });
 
         // Update name if changed
-        if (!fullName.equals(user.getFullName())) {
+        if (fullName != null && !fullName.equals(user.getFullName())) {
             log.info("Updating OAuth user profile: {}", LoggingUtil.maskEmail(email));
             user.setFullName(fullName);
             user = userRepository.save(user);

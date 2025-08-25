@@ -3,8 +3,11 @@ package com.nexsplit.config.security;
 import com.nexsplit.config.ApiConfig;
 import com.nexsplit.service.impl.CustomUserDetailsServiceImpl;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -13,7 +16,6 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -26,6 +28,7 @@ import java.util.List;
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
+@Slf4j
 public class SecurityConfig {
     private final JwtFilter jwtFilter;
     private final CustomUserDetailsServiceImpl userDetailsService;
@@ -36,7 +39,7 @@ public class SecurityConfig {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(ApiConfig.API_BASE_PATH + "/auth/**", "/login/oauth2/code/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/actuator/**").permitAll()
@@ -47,19 +50,18 @@ public class SecurityConfig {
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
-                .oauth2Login(oauth2 -> oauth2
-                        .defaultSuccessUrl(ApiConfig.API_BASE_PATH + "/auth/oauth-login", true)
-                        .userInfoEndpoint(userInfo -> userInfo.oidcUserService(oidcUserService())))
+                // OAuth2 is now handled via token exchange endpoint /api/v1/auth/oauth2/verify
+                // This provides better support for mobile apps and web apps using Google
+                // Sign-In SDK
 
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
-    @Bean
-    public OidcUserService oidcUserService() {
-        return new OidcUserService();
-    }
+    // OAuth2 is now handled via token exchange endpoint /api/v1/auth/oauth2/verify
+    // This provides better support for mobile apps and web apps using Google
+    // Sign-In SDK
 
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration authenticationConfiguration)

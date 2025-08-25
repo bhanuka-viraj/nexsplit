@@ -19,6 +19,20 @@
         </encoder>
     </appender>
 
+    <!-- Docker-specific structured JSON logging appender -->
+    <appender name="STRUCTURED_JSON_DOCKER" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>/app/logs/structured-logs.json</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>/app/logs/structured-logs.%d{yyyy-MM-dd}.json</fileNamePattern>
+            <maxHistory>7</maxHistory>
+        </rollingPolicy>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeMdc>true</includeMdc>
+            <includeContext>false</includeContext>
+            <customFields>{"application":"nexsplit","environment":"docker","logType":"structured"}</customFields>
+        </encoder>
+    </appender>
+
     <!-- Profile-specific configurations -->
     <springProfile name="default">
         <!-- Route structured logs -->
@@ -53,19 +67,19 @@
     <springProfile name="docker">
         <!-- Route structured logs -->
         <logger name="com.nexsplit.util.StructuredLoggingUtil" level="INFO" additivity="false">
-            <appender-ref ref="STRUCTURED_JSON"/>
+            <appender-ref ref="STRUCTURED_JSON_DOCKER"/>
             <appender-ref ref="CONSOLE"/>
         </logger>
 
         <!-- Route performance logs -->
         <logger name="com.nexsplit.aspect.LoggingAspect" level="DEBUG" additivity="false">
-            <appender-ref ref="STRUCTURED_JSON"/>
+            <appender-ref ref="STRUCTURED_JSON_DOCKER"/>
             <appender-ref ref="CONSOLE"/>
         </logger>
 
         <!-- Route security logs -->
         <logger name="com.nexsplit.config.security" level="WARN" additivity="false">
-            <appender-ref ref="STRUCTURED_JSON"/>
+            <appender-ref ref="STRUCTURED_JSON_DOCKER"/>
             <appender-ref ref="CONSOLE"/>
         </logger>
 

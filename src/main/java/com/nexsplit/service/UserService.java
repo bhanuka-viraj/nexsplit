@@ -8,6 +8,8 @@ import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 
 public interface UserService {
     User processOAuthUser(OidcUser oidcUser);
+    
+    User processOAuthUserByEmail(String email, String fullName);
 
     User registerUser(UserDto userDto);
 
