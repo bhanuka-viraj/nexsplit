@@ -8,7 +8,7 @@ import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 
 public interface UserService {
     User processOAuthUser(OidcUser oidcUser);
-    
+
     User processOAuthUserByEmail(String email, String fullName);
 
     User registerUser(UserDto userDto);
@@ -16,12 +16,6 @@ public interface UserService {
     String loginUser(String email, String password);
 
     String generateAccessToken(User user);
-
-    String generateRefreshToken(String userEmail);
-
-    String generateAccessToken(String refreshToken);
-
-    String getEmailFromRefreshToken(String refreshToken);
 
     UserDto getUserByEmail(String email);
 

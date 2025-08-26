@@ -167,26 +167,6 @@ public class UserServiceImpl implements UserService {
         return jwtUtil.generateAccessToken(user.getEmail(), "USER");
     }
 
-    public String generateRefreshToken(String userEmail) {
-        return jwtUtil.generateRefreshToken(userEmail);
-    }
-
-    public String generateAccessToken(String refreshToken) {
-        if (!jwtUtil.validateToken(refreshToken)) {
-            throw new UserUnauthorizedException("Invalid refresh token");
-        }
-        String email = jwtUtil.getEmailFromToken(refreshToken);
-        User user = userRepository.getUserByEmail(email);
-        return jwtUtil.generateAccessToken(email, "USER");
-    }
-
-    public String getEmailFromRefreshToken(String refreshToken) {
-        if (!jwtUtil.validateToken(refreshToken)) {
-            throw new UserUnauthorizedException("Invalid refresh token");
-        }
-        return jwtUtil.getEmailFromToken(refreshToken);
-    }
-
     public UserDto getUserByEmail(String email) {
         return userMapperRegistry.toDto(userRepository.getUserByEmail(email));
     }

@@ -27,7 +27,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Secure refresh token service with theft detection
+ * Secure JWT-based refresh token service with theft detection
  * Implements industrial-grade token rotation security with family tracking
  */
 @Service
@@ -54,13 +54,13 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     private int maxConcurrentSessions;
 
     /**
-     * Create a deterministic hash for refresh tokens
-     * Uses SHA-256 for consistent hashing (unlike BCrypt which uses random salts)
+     * Create a deterministic hash for JWT refresh tokens
+     * Uses SHA-256 for consistent hashing of JWT tokens
      */
-    private String createTokenHash(String tokenValue) {
+    private String createTokenHash(String jwtToken) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(tokenValue.getBytes(StandardCharsets.UTF_8));
+            byte[] hash = digest.digest(jwtToken.getBytes(StandardCharsets.UTF_8));
             StringBuilder hexString = new StringBuilder();
             for (byte b : hash) {
                 String hex = Integer.toHexString(0xff & b);
@@ -76,22 +76,30 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     }
 
     /**
-     * Generate a new refresh token for a user
+     * Generate a new JWT-based refresh token for a user
      * Creates a new family for each login session
      */
     @Transactional
     public String generateRefreshToken(String userId, String userAgent) {
-        // Generate unique token
-        String tokenValue = UUID.randomUUID().toString();
-        String tokenHash = createTokenHash(tokenValue); // Use deterministic hash
-        String familyId = UUID.randomUUID().toString(); // New family for each session
+        // Get user email for JWT claims
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found: " + userId));
 
-        log.debug("Generated refresh token for user: {}. Hash: {}", userId, tokenHash);
+        // Generate unique family ID for this session
+        String familyId = UUID.randomUUID().toString();
 
-        // Create refresh token entity
+        // Generate JWT-based refresh token with enhanced security claims
+        String jwtToken = jwtUtil.generateRefreshToken(userId, user.getEmail(), familyId, userAgent);
+        String tokenHash = createTokenHash(jwtToken); // Hash the JWT for database storage
+        String tokenId = jwtUtil.getTokenIdFromRefreshToken(jwtToken);
+
+        log.debug("Generated JWT refresh token for user: {}. Token ID: {}, Family: {}",
+                userId, tokenId, familyId);
+
+        // Create refresh token entity for database tracking
         RefreshToken refreshToken = RefreshToken.builder()
-                .id(UUID.randomUUID().toString())
-                .tokenHash(tokenHash)
+                .id(tokenId) // Use JWT token ID as database ID
+                .tokenHash(tokenHash) // Store hash of JWT for validation
                 .userId(userId)
                 .familyId(familyId)
                 .expiresAt(LocalDateTime.now().plusDays(refreshTokenExpirationDays))
@@ -100,25 +108,37 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
 
         refreshTokenRepository.save(refreshToken);
 
-        // Return the actual token (not the hash)
-        return tokenValue;
+        // Return the actual JWT token (not the hash)
+        return jwtToken;
     }
 
     /**
-     * Refresh access token with comprehensive theft detection
+     * Refresh access token with comprehensive theft detection using JWT tokens
      * Tracks token families and detects any unauthorized access
      */
     @Transactional
-    public RefreshTokenResponse refreshAccessToken(String refreshTokenValue, String ipAddress, String userAgent) {
-        // Hash the provided token using deterministic method
-        String tokenHash = createTokenHash(refreshTokenValue);
+    public RefreshTokenResponse refreshAccessToken(String jwtRefreshToken, String ipAddress, String userAgent) {
+        // Validate JWT token structure and type
+        if (!jwtUtil.validateRefreshToken(jwtRefreshToken)) {
+            log.error("Invalid JWT refresh token structure");
+            throw new SecurityException("Invalid refresh token");
+        }
 
-        log.debug("Looking for refresh token with hash: {}", tokenHash);
+        // Extract claims from JWT
+        String tokenId = jwtUtil.getTokenIdFromRefreshToken(jwtRefreshToken);
+        String userId = jwtUtil.getUserIdFromRefreshToken(jwtRefreshToken);
+        String familyId = jwtUtil.getFamilyIdFromRefreshToken(jwtRefreshToken);
+        String expectedUserAgent = jwtUtil.getUserAgentFromRefreshToken(jwtRefreshToken);
 
-        // Find the refresh token
+        // Hash the JWT for database lookup
+        String tokenHash = createTokenHash(jwtRefreshToken);
+
+        log.debug("Looking for refresh token with ID: {}, Hash: {}", tokenId, tokenHash);
+
+        // Find the refresh token in database
         RefreshToken refreshToken = refreshTokenRepository.findByTokenHash(tokenHash)
                 .orElseThrow(() -> {
-                    log.error("Refresh token not found in database. Hash: {}", tokenHash);
+                    log.error("Refresh token not found in database. Token ID: {}, Hash: {}", tokenId, tokenHash);
                     return new SecurityException("Invalid refresh token");
                 });
 
@@ -139,8 +159,8 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
             throw new SecurityException("Security violation detected - please re-authenticate");
         }
 
-        // Check for suspicious activity
-        if (isSuspiciousActivity(refreshToken, ipAddress, userAgent)) {
+        // Check for suspicious activity (IP/UA changes)
+        if (isSuspiciousActivity(refreshToken, ipAddress, userAgent, expectedUserAgent)) {
             log.warn("Suspicious refresh token activity detected for user: {}", refreshToken.getUserId());
             handleTokenTheft(refreshToken);
             throw new SecurityException("Suspicious activity detected");
@@ -157,51 +177,54 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
         refreshToken.markAsUsed();
         refreshTokenRepository.save(refreshToken);
 
-        // Get user email for access token generation
-        User user = userRepository.findById(refreshToken.getUserId())
+        // Get user for new token generation
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new SecurityException("User not found"));
 
-        // Generate new access token with user email
+        // Generate new access token
         String newAccessToken = jwtUtil.generateAccessToken(user.getEmail(), "USER");
 
-        log.debug("Generated new access token for user: {} (email: {})", refreshToken.getUserId(), user.getEmail());
+        // Generate new refresh token in the same family (token rotation)
+        String newRefreshToken = generateRefreshTokenInSameFamily(userId, familyId, userAgent);
 
-        // Generate new refresh token (token rotation) - SAME FAMILY
-        String newRefreshToken = generateRefreshTokenInSameFamily(refreshToken.getUserId(),
-                refreshToken.getFamilyId(), userAgent);
-
-        log.info("Token refreshed successfully for user: {} (email: {})", refreshToken.getUserId(), user.getEmail());
+        log.info("Token refreshed successfully for user: {} (email: {})", userId, user.getEmail());
 
         // Log authentication event asynchronously
         auditService.logAuthenticationEventAsync(
-                refreshToken.getUserId(),
+                userId,
                 "TOKEN_REFRESH",
-                ipAddress, // Use the current IP from method parameter
-                refreshToken.getUserAgent(),
+                ipAddress,
+                userAgent,
                 "Access token refreshed successfully");
 
         return new RefreshTokenResponse(newAccessToken, newRefreshToken);
     }
 
     /**
-     * Generate refresh token in the same family (for rotation)
+     * Generate JWT refresh token in the same family (for rotation)
      */
     private String generateRefreshTokenInSameFamily(String userId, String familyId, String userAgent) {
-        String tokenValue = UUID.randomUUID().toString();
-        String tokenHash = createTokenHash(tokenValue); // Use deterministic hash
+        // Get user email for JWT claims
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found: " + userId));
 
+        // Generate new JWT refresh token in the same family
+        String jwtToken = jwtUtil.generateRefreshToken(userId, user.getEmail(), familyId, userAgent);
+        String tokenHash = createTokenHash(jwtToken);
+        String tokenId = jwtUtil.getTokenIdFromRefreshToken(jwtToken);
+
+        // Create database record for the new token
         RefreshToken refreshToken = RefreshToken.builder()
-                .id(UUID.randomUUID().toString())
+                .id(tokenId)
                 .tokenHash(tokenHash)
                 .userId(userId)
                 .familyId(familyId) // Same family for rotation
                 .expiresAt(LocalDateTime.now().plusDays(refreshTokenExpirationDays))
-
                 .userAgent(userAgent)
                 .build();
 
         refreshTokenRepository.save(refreshToken);
-        return tokenValue;
+        return jwtToken;
     }
 
     /**
@@ -329,19 +352,20 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
      * @param currentUserAgent The current user agent string
      * @return true if suspicious activity detected, false otherwise
      */
-    private boolean isSuspiciousActivity(RefreshToken token, String currentIp, String currentUserAgent) {
+    private boolean isSuspiciousActivity(RefreshToken token, String currentIp, String currentUserAgent,
+            String expectedUserAgent) {
         // Log IP address for audit purposes (but don't block on changes)
         if (currentIp != null) {
             log.debug("Refresh token used from IP: {} for user: {}", currentIp, token.getUserId());
         }
 
-        // Check if user agent changed (more reliable indicator)
-        if (token.getUserAgent() != null && currentUserAgent != null) {
-            if (!token.getUserAgent().equals(currentUserAgent)) {
-                log.warn("User agent changed for refresh token: {} -> {}",
-                        token.getUserAgent(), currentUserAgent);
-                // Consider this suspicious but don't block immediately
-                // Could be legitimate (browser update, different device)
+        // Check if user agent changed (compare with expected from JWT)
+        if (expectedUserAgent != null && currentUserAgent != null) {
+            if (!expectedUserAgent.equals(currentUserAgent)) {
+                log.warn("User agent mismatch for refresh token: expected {} but got {}",
+                        expectedUserAgent, currentUserAgent);
+                // This is suspicious - user agent in JWT should match current request
+                return true;
             }
         }
 
