@@ -6,7 +6,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.RestClient;
 
 import java.util.Map;
 
@@ -17,6 +17,12 @@ import java.util.Map;
 @Configuration
 @Slf4j
 public class ElasticsearchConfig {
+
+    private final RestClient restClient;
+
+    public ElasticsearchConfig(RestClient restClient) {
+        this.restClient = restClient;
+    }
 
     @Value("${elasticsearch.host:elasticsearch}")
     private String elasticsearchHost;
@@ -34,28 +40,24 @@ public class ElasticsearchConfig {
     private String environment;
 
     /**
-     * RestTemplate bean for Elasticsearch HTTP operations
-     */
-    @Bean
-    public RestTemplate elasticsearchRestTemplate() {
-        return new RestTemplate();
-    }
-
-    /**
      * Check Elasticsearch health status
      */
     public boolean isElasticsearchHealthy() {
         try {
-            String healthUrl = String.format("%s://%s:%d/_cluster/health",
-                    elasticsearchProtocol, elasticsearchHost, elasticsearchPort);
+            String healthUrl = getElasticsearchUrl() + "/_cluster/health";
 
-            ResponseEntity<Map> response = elasticsearchRestTemplate().getForEntity(healthUrl, Map.class);
+            ResponseEntity<Map> response = restClient.get()
+                    .uri(healthUrl)
+                    .retrieve()
+                    .toEntity(Map.class);
 
             if (response.getStatusCode() == HttpStatus.OK) {
                 Map<String, Object> healthData = response.getBody();
                 String status = (String) healthData.get("status");
-                log.info("Elasticsearch health check - Status: {}, Cluster: {}, Nodes: {}",
-                        status, healthData.get("cluster_name"), healthData.get("number_of_nodes"));
+                log.info(
+                        "Elasticsearch health check - Status: {}, Cluster: {}, Nodes: {},Index : {}, Index pattern: {}",
+                        status, healthData.get("cluster_name"), healthData.get("number_of_nodes"), getIndexName(),
+                        getIndexPattern());
                 return "green".equals(status) || "yellow".equals(status);
             } else {
                 log.warn("Elasticsearch health check failed - Status code: {}", response.getStatusCode());

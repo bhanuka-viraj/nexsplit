@@ -133,13 +133,8 @@ public class AuthController {
                 String userAgent = request.getHeader("User-Agent");
 
                 // Log audit event asynchronously
-                CompletableFuture.runAsync(() -> {
-                        auditService.logAuthenticationEventAsync(user.getId(), "USER_REGISTRATION_SUCCESS", ipAddress,
-                                        userAgent, "User registration successful - email verification pending");
-                }).exceptionally(throwable -> {
-                        log.error("Failed to log registration audit event: {}", throwable.getMessage());
-                        return null;
-                });
+                auditService.logAuthenticationEventAsync(user.getId(), "USER_REGISTRATION_SUCCESS", ipAddress,
+                                userAgent, "User registration successful - email verification pending");
 
                 // Log business event for Elasticsearch
                 StructuredLoggingUtil.logBusinessEvent(

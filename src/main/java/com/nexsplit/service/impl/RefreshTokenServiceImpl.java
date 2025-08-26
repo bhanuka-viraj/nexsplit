@@ -422,16 +422,15 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     @Async("asyncExecutor")
     @Transactional
     public CompletableFuture<Void> cleanupExpiredTokensAsync() {
-        return CompletableFuture.runAsync(() -> {
-            try {
-                log.info("Starting cleanup of expired refresh tokens...");
-                refreshTokenRepository.deleteExpiredTokens(LocalDateTime.now());
-                log.info("Cleanup of expired refresh tokens completed successfully");
-            } catch (Exception e) {
-                log.error("Error during cleanup: {}", e.getMessage(), e);
-                throw new RuntimeException(e);
-            }
-        });
+        try {
+            log.info("Starting cleanup of expired refresh tokens...");
+            refreshTokenRepository.deleteExpiredTokens(LocalDateTime.now());
+            log.info("Cleanup of expired refresh tokens completed successfully");
+            return CompletableFuture.completedFuture(null);
+        } catch (Exception e) {
+            log.error("Error during cleanup: {}", e.getMessage(), e);
+            return CompletableFuture.failedFuture(e);
+        }
     }
 
     /**

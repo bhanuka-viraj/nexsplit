@@ -16,7 +16,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
@@ -34,7 +34,7 @@ public class OAuth2ServiceImpl implements OAuth2Service {
     private final RefreshTokenServiceImpl refreshTokenService;
     private final JwtUtil jwtUtil;
     private final AuditService auditService;
-    private final RestTemplate restTemplate;
+    private final RestClient restClient;
     private final ObjectMapper objectMapper;
 
     @Value("${spring.security.oauth2.client.registration.google.client-id}")
@@ -61,17 +61,12 @@ public class OAuth2ServiceImpl implements OAuth2Service {
             String refreshToken = refreshTokenService.generateRefreshToken(user.getId(), userAgent);
 
             // 4. Log audit event asynchronously
-            CompletableFuture.runAsync(() -> {
-                auditService.logAuthenticationEventAsync(
-                        user.getId(),
-                        "OAUTH_LOGIN_SUCCESS",
-                        ipAddress,
-                        userAgent,
-                        "OAuth2 login successful");
-            }).exceptionally(throwable -> {
-                log.error("Failed to log OAuth2 audit event: {}", throwable.getMessage());
-                return null;
-            });
+            auditService.logAuthenticationEventAsync(
+                    user.getId(),
+                    "OAUTH_LOGIN_SUCCESS",
+                    ipAddress,
+                    userAgent,
+                    "OAuth2 login successful");
 
             // 5. Create response
             AuthResponse authResponse = AuthResponse.builder()
@@ -98,7 +93,10 @@ public class OAuth2ServiceImpl implements OAuth2Service {
             // Call Google's userinfo endpoint to validate token
             String userInfoUrl = "https://www.googleapis.com/oauth2/v3/userinfo";
 
-            String response = restTemplate.getForObject(userInfoUrl + "?access_token=" + googleToken, String.class);
+            String response = restClient.get()
+                    .uri(userInfoUrl + "?access_token=" + googleToken)
+                    .retrieve()
+                    .body(String.class);
 
             if (response == null) {
                 throw new RuntimeException("Failed to get user info from Google");
