@@ -3,6 +3,7 @@ package com.nexsplit.config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import java.util.concurrent.Executor;
@@ -53,6 +54,7 @@ import java.util.concurrent.Executor;
  */
 @Configuration
 @EnableAsync
+@EnableScheduling
 public class AsyncConfig {
 
     /**
@@ -115,6 +117,45 @@ public class AsyncConfig {
         executor.setMaxPoolSize(8); // 2x CPU cores for burst
         executor.setQueueCapacity(100); // Smaller queue for CPU tasks
         executor.setThreadNamePrefix("CPU-");
+        executor.initialize();
+
+        return executor;
+    }
+
+    /**
+     * Configure scheduled task executor using virtual threads
+     * 
+     * WHY VIRTUAL THREADS FOR SCHEDULED TASKS:
+     * - Most scheduled tasks are I/O bound (cleanup, health checks, etc.)
+     * - Virtual threads handle I/O operations efficiently
+     * - Better resource utilization for background tasks
+     * - Automatic scaling based on task load
+     * 
+     * SCHEDULED TASKS IN NEXSPLIT:
+     * - Rate limit cleanup (every 5 minutes)
+     * - Database cleanup (daily)
+     * - Health checks (every minute)
+     * - Cache refresh (periodic)
+     * 
+     * CONFIGURATION:
+     * - Core Pool Size: 5 (minimum for scheduled tasks)
+     * - Max Pool Size: 20 (enough for concurrent scheduled tasks)
+     * - Queue Capacity: 100 (scheduled tasks queue)
+     */
+    @Bean(name = "scheduledTaskExecutor")
+    public Executor scheduledTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+
+        // Use virtual threads for scheduled tasks
+        executor.setTaskDecorator(runnable -> {
+            return Thread.ofVirtual().unstarted(runnable);
+        });
+
+        // Configure for scheduled tasks
+        executor.setCorePoolSize(5); // Minimum threads for scheduled tasks
+        executor.setMaxPoolSize(20); // Maximum for concurrent scheduled tasks
+        executor.setQueueCapacity(100); // Queue for scheduled tasks
+        executor.setThreadNamePrefix("Scheduled-"); // Easy identification
         executor.initialize();
 
         return executor;

@@ -1,4 +1,4 @@
-package com.nexsplit.config.security;
+package com.nexsplit.config.filter;
 
 import com.nexsplit.config.ApiConfig;
 import com.nexsplit.service.impl.CustomUserDetailsServiceImpl;

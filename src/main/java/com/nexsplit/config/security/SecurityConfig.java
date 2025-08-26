@@ -1,12 +1,12 @@
 package com.nexsplit.config.security;
 
 import com.nexsplit.config.ApiConfig;
+import com.nexsplit.config.filter.JwtFilter;
 import com.nexsplit.service.impl.CustomUserDetailsServiceImpl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Lazy;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;

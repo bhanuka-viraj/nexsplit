@@ -1,4 +1,4 @@
-package com.nexsplit.config;
+package com.nexsplit.config.filter;
 
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServletRequest;
@@ -66,5 +66,12 @@ public class CorrelationIdFilter implements Filter {
         }
 
         return correlationId;
+    }
+
+    /**
+     * Get current correlation ID from MDC
+     */
+    public static String getCurrentCorrelationId() {
+        return MDC.get(CORRELATION_ID_MDC_KEY);
     }
 }

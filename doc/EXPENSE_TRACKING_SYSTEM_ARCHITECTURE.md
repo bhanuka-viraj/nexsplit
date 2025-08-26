@@ -1,5 +1,18 @@
 # Expense Tracking System Architecture
 
+## Table of Contents
+
+1. [System Overview](#system-overview)
+2. [Database Schema](#database-schema)
+3. [API Endpoints](#api-endpoints)
+4. [Settlement Algorithms](#settlement-algorithms)
+5. [Real-Time Updates](#real-time-updates)
+6. [Implementation Architecture](#implementation-architecture)
+7. [Response Consistency Mechanism](#response-consistency-mechanism)
+8. [Performance & Monitoring](#performance--monitoring)
+9. [Testing Strategy](#testing-strategy)
+10. [Deployment](#deployment)
+
 ## Overview
 
 This document outlines the complete architecture for the NexSplit expense tracking system, including database design, API endpoints, settlement algorithms, and implementation strategies.
@@ -985,6 +998,290 @@ public class SseHealthIndicator implements HealthIndicator {
     }
 }
 ```
+
+## Response Consistency Mechanism
+
+### Overview
+
+The system implements industrial-grade response consistency following REST API best practices with standardized error handling, correlation tracking, and structured responses.
+
+### Core Components
+
+#### 1. Enhanced ApiResponse Structure
+
+```java
+@JsonInclude(JsonInclude.Include.NON_NULL)
+public class ApiResponse<T> {
+    private boolean success;
+    private String message;
+    private T data;
+    private List<String> errors;
+    private String correlationId;
+    private LocalDateTime timestamp;
+    private String requestId;
+    private MetaInfo meta;
+}
+```
+
+**Features:**
+
+- **Generic Type Support**: `ApiResponse<T>` for type-safe responses
+- **Correlation Tracking**: Links requests across distributed systems
+- **Timestamp**: Automatic response timing
+- **Metadata**: Error codes, documentation URLs, version info
+- **Backward Compatibility**: Legacy methods preserved
+
+#### 2. Standardized Error Codes
+
+```java
+public enum ErrorCode {
+    // Authentication Errors
+    AUTH_TOKEN_EXPIRED("AUTH_001", "AUTHENTICATION_ERROR"),
+    AUTH_INVALID_CREDENTIALS("AUTH_002", "AUTHENTICATION_ERROR"),
+
+    // Business Errors
+    USER_NOT_FOUND("USER_001", "BUSINESS_ERROR"),
+    NEX_MEMBER_LIMIT_EXCEEDED("NEX_002", "BUSINESS_ERROR"),
+
+    // Validation Errors
+    VALIDATION_REQUIRED_FIELD("VAL_001", "VALIDATION_ERROR"),
+    VALIDATION_INVALID_AMOUNT("VAL_005", "VALIDATION_ERROR"),
+
+    // System Errors
+    INTERNAL_SERVER_ERROR("SYS_001", "SYSTEM_ERROR")
+}
+```
+
+**Benefits:**
+
+- **Consistent Error Handling**: Standardized across all endpoints
+- **Client Integration**: Mobile apps can handle errors predictably
+- **Monitoring**: Easy filtering and alerting by error type
+- **Documentation**: Self-documenting error codes
+
+#### 3. Enhanced Global Exception Handler
+
+```java
+@ControllerAdvice
+public class GlobalExceptionHandler {
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException ex) {
+        // Structured logging with correlation ID
+        // Standardized error response with error codes
+        // Automatic correlation ID injection
+    }
+}
+```
+
+**Features:**
+
+- **Structured Logging**: All errors logged with context
+- **Correlation ID Injection**: Automatic request tracking
+- **Error Code Mapping**: Business exceptions to standard codes
+- **Field-Level Validation**: Detailed validation error reporting
+
+#### 4. Response Headers
+
+```http
+X-Correlation-ID: abc123
+X-Request-ID: def456
+X-Response-Time: 150ms
+X-Rate-Limit-Remaining: 999
+X-API-Version: 1.0.0
+X-Server: NexSplit-API
+```
+
+**Headers Added:**
+
+- **X-Correlation-ID**: Request tracing across services
+- **X-Request-ID**: Unique request identifier
+- **X-Response-Time**: Performance monitoring
+- **X-Rate-Limit-Remaining**: Rate limiting info
+- **X-API-Version**: API version tracking
+
+#### 5. Pagination Support
+
+```java
+public class PaginatedResponse<T> {
+    private List<T> data;
+    private PaginationInfo pagination;
+    private MetaInfo meta;
+
+    public static class PaginationInfo {
+        private int page;
+        private int size;
+        private long totalElements;
+        private int totalPages;
+        private boolean hasNext;
+        private boolean hasPrevious;
+        private String nextPageUrl;
+        private String previousPageUrl;
+    }
+}
+```
+
+**Features:**
+
+- **HATEOAS Links**: Self-documenting pagination URLs
+- **Metadata**: Complete pagination information
+- **Consistent Structure**: Same format across all list endpoints
+
+### Usage Examples
+
+#### Success Response
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "name": "Dinner Group",
+    "members": 4
+  },
+  "message": "Nex created successfully",
+  "timestamp": "2024-01-15T10:30:00",
+  "correlationId": "abc123",
+  "requestId": "def456"
+}
+```
+
+#### Error Response
+
+```json
+{
+  "success": false,
+  "message": "Validation failed",
+  "errors": [
+    "amount: must be greater than 0",
+    "description: must not be empty"
+  ],
+  "timestamp": "2024-01-15T10:30:00",
+  "correlationId": "abc123",
+  "requestId": "def456",
+  "meta": {
+    "errorCode": "VAL_005",
+    "errorType": "VALIDATION_ERROR",
+    "documentationUrl": "/api/docs/errors/VAL_005"
+  }
+}
+```
+
+#### Paginated Response
+
+```json
+{
+  "success": true,
+  "data": [
+    { "id": 1, "name": "Expense 1" },
+    { "id": 2, "name": "Expense 2" }
+  ],
+  "pagination": {
+    "page": 0,
+    "size": 10,
+    "totalElements": 25,
+    "totalPages": 3,
+    "hasNext": true,
+    "hasPrevious": false,
+    "nextPageUrl": "/api/v1/expenses?page=1&size=10",
+    "previousPageUrl": null
+  },
+  "timestamp": "2024-01-15T10:30:00",
+  "correlationId": "abc123"
+}
+```
+
+### Implementation Benefits
+
+#### 1. **Mobile App Integration**
+
+```typescript
+class ApiClient {
+  async request<T>(endpoint: string): Promise<ApiResponse<T>> {
+    const response = await fetch(endpoint);
+    const data = await response.json();
+
+    // Consistent error handling
+    if (!data.success) {
+      throw new ApiError(data.message, data.meta?.errorCode);
+    }
+
+    return data;
+  }
+}
+```
+
+#### 2. **Monitoring & Debugging**
+
+- **Correlation Tracking**: Link requests across services
+- **Performance Monitoring**: Response time tracking
+- **Error Aggregation**: Group by error codes
+- **Request Tracing**: Full request lifecycle
+
+#### 3. **API Documentation**
+
+- **Self-Documenting**: Error codes with descriptions
+- **Consistent Structure**: Predictable response format
+- **HATEOAS**: Self-documenting pagination links
+
+### Configuration
+
+#### 1. **Filters Order**
+
+```java
+@Component
+@Order(1)
+public class CorrelationIdFilter implements Filter { }
+
+@Component
+@Order(2)
+public class ResponseHeaderFilter implements Filter { }
+```
+
+#### 2. **Exception Handling Priority**
+
+1. **Business Exceptions**: Custom business logic errors
+2. **Validation Exceptions**: Input validation errors
+3. **Authentication Exceptions**: Security-related errors
+4. **System Exceptions**: Unexpected errors
+
+#### 3. **Logging Integration**
+
+- **Structured Logging**: JSON format for Elasticsearch
+- **Correlation ID**: Automatic request tracking
+- **Error Context**: Rich error information
+- **Performance Metrics**: Response time logging
+
+### Best Practices
+
+#### 1. **Error Handling**
+
+- Always use `BusinessException` for business rule violations
+- Include correlation ID in all error responses
+- Log errors with structured context
+- Return appropriate HTTP status codes
+
+#### 2. **Response Structure**
+
+- Use generic `ApiResponse<T>` for type safety
+- Include correlation ID in all responses
+- Add meaningful error messages
+- Use standardized error codes
+
+#### 3. **Pagination**
+
+- Always use `PaginatedResponse<T>` for list endpoints
+- Include HATEOAS links for navigation
+- Provide complete pagination metadata
+- Support customizable page sizes
+
+#### 4. **Headers**
+
+- Always include correlation ID
+- Add response time for monitoring
+- Include API version for compatibility
+- Provide rate limit information
+
+This response consistency mechanism ensures a professional, maintainable, and user-friendly API that follows industry best practices and provides excellent developer experience.
 
 ## Implementation Architecture
 
