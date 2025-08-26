@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
@@ -14,9 +15,10 @@ import org.thymeleaf.context.Context;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
- * Implementation of EmailService for sending emails
+ * Implementation of EmailService for sending emails asynchronously
  */
 @Service
 @RequiredArgsConstructor
@@ -36,7 +38,8 @@ public class EmailServiceImpl implements EmailService {
     private String appBaseUrl;
 
     @Override
-    public void sendSimpleEmail(String to, String subject, String text) {
+    @Async("asyncExecutor")
+    public CompletableFuture<Void> sendSimpleEmail(String to, String subject, String text) {
         try {
             log.info("Sending simple email to: {} with subject: '{}'", LoggingUtil.maskEmail(to), subject);
             log.debug("Email configuration - From: {}, Host: {}", LoggingUtil.maskEmail(fromEmail),
@@ -56,15 +59,17 @@ public class EmailServiceImpl implements EmailService {
             mailSender.send(message);
 
             log.info("Simple email sent successfully to: {}", LoggingUtil.maskEmail(to));
+            return CompletableFuture.completedFuture(null);
         } catch (Exception e) {
             log.error("Failed to send simple email to: {} - Error: {} - Type: {}",
                     LoggingUtil.maskEmail(to), e.getMessage(), e.getClass().getSimpleName(), e);
-            throw new RuntimeException("Failed to send email: " + e.getMessage(), e);
+            return CompletableFuture.failedFuture(new RuntimeException("Failed to send email: " + e.getMessage(), e));
         }
     }
 
     @Override
-    public void sendPasswordResetEmail(String to, String resetToken, String username) {
+    @Async("asyncExecutor")
+    public CompletableFuture<Void> sendPasswordResetEmail(String to, String resetToken, String username) {
         try {
             log.info("Sending password reset email to: {}", LoggingUtil.maskEmail(to));
 
@@ -82,14 +87,18 @@ public class EmailServiceImpl implements EmailService {
             // Send the email
             sendHtmlEmail(to, subject, htmlContent);
 
+            log.info("Password reset email sent successfully to: {}", LoggingUtil.maskEmail(to));
+            return CompletableFuture.completedFuture(null);
+
         } catch (Exception e) {
             log.error("Failed to send password reset email to: {}", LoggingUtil.maskEmail(to), e);
-            throw new RuntimeException("Failed to send password reset email", e);
+            return CompletableFuture.failedFuture(new RuntimeException("Failed to send password reset email", e));
         }
     }
 
     @Override
-    public void sendWelcomeEmail(String to, String username) {
+    @Async("asyncExecutor")
+    public CompletableFuture<Void> sendWelcomeEmail(String to, String username) {
         try {
             log.info("Sending welcome email to: {}", LoggingUtil.maskEmail(to));
 
@@ -106,25 +115,28 @@ public class EmailServiceImpl implements EmailService {
             // Send the email
             sendHtmlEmail(to, subject, htmlContent);
 
+            log.info("Welcome email sent successfully to: {}", LoggingUtil.maskEmail(to));
+            return CompletableFuture.completedFuture(null);
+
         } catch (Exception e) {
             log.error("Failed to send welcome email to: {}", LoggingUtil.maskEmail(to), e);
-            throw new RuntimeException("Failed to send welcome email", e);
+            return CompletableFuture.failedFuture(new RuntimeException("Failed to send welcome email", e));
         }
     }
 
     @Override
-    public void sendEmailVerification(String to, String verificationToken, String username) {
+    @Async("asyncExecutor")
+    public CompletableFuture<Void> sendEmailVerification(String to, String verificationToken, String username) {
         try {
             log.info("Sending email verification to: {}", LoggingUtil.maskEmail(to));
 
-            String subject = "Verify Your Email - NexSplit";
+            String subject = "NexSplit - Email Verification";
 
             // Create Thymeleaf context
             Context context = new Context();
             context.setVariable("username", username);
             context.setVariable("verificationToken", verificationToken);
             context.setVariable("subject", subject);
-            context.setVariable("appBaseUrl", appBaseUrl);
 
             // Process the template
             String htmlContent = templateEngine.process("email/email-verification", context);
@@ -132,14 +144,18 @@ public class EmailServiceImpl implements EmailService {
             // Send the email
             sendHtmlEmail(to, subject, htmlContent);
 
+            log.info("Email verification sent successfully to: {}", LoggingUtil.maskEmail(to));
+            return CompletableFuture.completedFuture(null);
+
         } catch (Exception e) {
             log.error("Failed to send email verification to: {}", LoggingUtil.maskEmail(to), e);
-            throw new RuntimeException("Failed to send email verification", e);
+            return CompletableFuture.failedFuture(new RuntimeException("Failed to send email verification", e));
         }
     }
 
     @Override
-    public void sendTestPreviewEmail(String to, String username) {
+    @Async("asyncExecutor")
+    public CompletableFuture<Void> sendTestPreviewEmail(String to, String username) {
         try {
             log.info("Sending test preview email to: {}", LoggingUtil.maskEmail(to));
 
@@ -156,9 +172,12 @@ public class EmailServiceImpl implements EmailService {
             // Send the email
             sendHtmlEmail(to, subject, htmlContent);
 
+            log.info("Test preview email sent successfully to: {}", LoggingUtil.maskEmail(to));
+            return CompletableFuture.completedFuture(null);
+
         } catch (Exception e) {
             log.error("Failed to send test preview email to: {}", LoggingUtil.maskEmail(to), e);
-            throw new RuntimeException("Failed to send test preview email", e);
+            return CompletableFuture.failedFuture(new RuntimeException("Failed to send test preview email", e));
         }
     }
 

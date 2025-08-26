@@ -230,7 +230,12 @@ Monitor application health:
 1. **Check Filebeat**: `docker logs nexsplit-filebeat-debug`
 2. **Verify Elasticsearch**: http://localhost:9200
 3. **Check Kibana**: http://localhost:5601
-4. **Restart services**: If logs aren't appearing
+4. **If Filebeat fails to start due to Kibana not being ready:**
+   ```bash
+   # Wait for Kibana to be healthy, then restart Filebeat
+   docker-compose -f docker-compose.debug.yml up filebeat -d
+   ```
+5. **Restart services**: If logs aren't appearing
 
 ## 🧹 Cleanup
 

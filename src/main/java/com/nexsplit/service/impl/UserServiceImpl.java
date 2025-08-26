@@ -125,24 +125,16 @@ public class UserServiceImpl implements UserService {
         log.info("User registered successfully: {}", LoggingUtil.maskEmail(userDto.getEmail()));
 
         // Send email verification asynchronously
-        CompletableFuture.runAsync(() -> {
-            try {
-                emailService.sendEmailVerification(user.getEmail(), String.valueOf(verificationToken),
-                        user.getUsername());
-                log.info("Email verification sent successfully to: {}", LoggingUtil.maskEmail(user.getEmail()));
-            } catch (Exception e) {
-                log.error("Failed to send email verification to: {}", LoggingUtil.maskEmail(user.getEmail()), e);
-                // Don't throw exception to avoid affecting user registration
-            }
-        });
+        emailService.sendEmailVerification(user.getEmail(), String.valueOf(verificationToken),
+                user.getUsername())
+                .exceptionally(throwable -> {
+                    log.error("Failed to send email verification to: {}", LoggingUtil.maskEmail(user.getEmail()),
+                            throwable);
+                    return null;
+                });
 
         // Log audit event asynchronously
-        CompletableFuture.runAsync(() -> {
-            auditService.logUserActionAsync(savedUser.getId(), "USER_REGISTERED", "New user registered successfully");
-        }).exceptionally(throwable -> {
-            log.error("Error in audit logging for user registration: {}", throwable.getMessage(), throwable);
-            return null;
-        });
+        auditService.logUserActionAsync(savedUser.getId(), "USER_REGISTERED", "New user registered successfully");
 
         return savedUser;
     }
@@ -271,23 +263,16 @@ public class UserServiceImpl implements UserService {
 
         log.info("Password reset token generated for: {} - Token: {}", LoggingUtil.maskEmail(email), resetToken);
 
-        // Send password reset email
-        try {
-            emailService.sendPasswordResetEmail(email, String.valueOf(resetToken), user.getUsername());
-            log.info("Password reset email sent successfully to: {}", LoggingUtil.maskEmail(email));
-        } catch (Exception e) {
-            log.error("Failed to send password reset email to: {}", LoggingUtil.maskEmail(email), e);
-            // Don't throw exception to avoid revealing if email exists
-        }
+        // Send password reset email asynchronously
+        emailService.sendPasswordResetEmail(email, String.valueOf(resetToken), user.getUsername())
+                .exceptionally(throwable -> {
+                    log.error("Failed to send password reset email to: {}", LoggingUtil.maskEmail(email), throwable);
+                    return null;
+                });
 
         // Log audit event asynchronously
-        CompletableFuture.runAsync(() -> {
-            auditService.logSecurityEventAsync(user.getId(), "PASSWORD_RESET_REQUESTED",
-                    "Password reset requested via email");
-        }).exceptionally(throwable -> {
-            log.error("Error in audit logging for password reset: {}", throwable.getMessage(), throwable);
-            return null;
-        });
+        auditService.logSecurityEventAsync(user.getId(), "PASSWORD_RESET_REQUESTED",
+                "Password reset requested via email");
     }
 
     @Transactional
@@ -360,24 +345,15 @@ public class UserServiceImpl implements UserService {
                 verificationToken);
 
         // Send email verification asynchronously
-        CompletableFuture.runAsync(() -> {
-            try {
-                emailService.sendEmailVerification(email, String.valueOf(verificationToken), user.getUsername());
-                log.info("Email verification resent successfully to: {}", LoggingUtil.maskEmail(email));
-            } catch (Exception e) {
-                log.error("Failed to resend email verification to: {}", LoggingUtil.maskEmail(email), e);
-                // Don't throw exception to avoid affecting the request
-            }
-        });
+        emailService.sendEmailVerification(email, String.valueOf(verificationToken), user.getUsername())
+                .exceptionally(throwable -> {
+                    log.error("Failed to resend email verification to: {}", LoggingUtil.maskEmail(email), throwable);
+                    return null;
+                });
 
         // Log audit event asynchronously
-        CompletableFuture.runAsync(() -> {
-            auditService.logSecurityEventAsync(user.getId(), "EMAIL_VERIFICATION_RESENT",
-                    "Email verification resent to user");
-        }).exceptionally(throwable -> {
-            log.error("Error in audit logging for email verification resend: {}", throwable.getMessage(), throwable);
-            return null;
-        });
+        auditService.logSecurityEventAsync(user.getId(), "EMAIL_VERIFICATION_RESENT",
+                "Email verification resent to user");
     }
 
     @Transactional
@@ -414,26 +390,16 @@ public class UserServiceImpl implements UserService {
         log.info("Email confirmed successfully for: {}", LoggingUtil.maskEmail(confirmedUser.getEmail()));
 
         // Send welcome email asynchronously after successful verification
-        CompletableFuture.runAsync(() -> {
-            try {
-                emailService.sendWelcomeEmail(confirmedUser.getEmail(), confirmedUser.getUsername());
-                log.info("Welcome email sent successfully after verification to: {}",
-                        LoggingUtil.maskEmail(confirmedUser.getEmail()));
-            } catch (Exception e) {
-                log.error("Failed to send welcome email after verification to: {}",
-                        LoggingUtil.maskEmail(confirmedUser.getEmail()), e);
-                // Don't throw exception to avoid affecting email confirmation
-            }
-        });
+        emailService.sendWelcomeEmail(confirmedUser.getEmail(), confirmedUser.getUsername())
+                .exceptionally(throwable -> {
+                    log.error("Failed to send welcome email after verification to: {}",
+                            LoggingUtil.maskEmail(confirmedUser.getEmail()), throwable);
+                    return null;
+                });
 
         // Log audit event for email confirmation
-        CompletableFuture.runAsync(() -> {
-            auditService.logSecurityEventAsync(confirmedUser.getId(), "EMAIL_CONFIRMED",
-                    "Email confirmed successfully");
-        }).exceptionally(throwable -> {
-            log.error("Error in audit logging for email confirmation: {}", throwable.getMessage(), throwable);
-            return null;
-        });
+        auditService.logSecurityEventAsync(confirmedUser.getId(), "EMAIL_CONFIRMED",
+                "Email confirmed successfully");
 
         return confirmedUser;
     }

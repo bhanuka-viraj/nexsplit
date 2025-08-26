@@ -756,7 +756,12 @@ public class AuthController {
 
                         // Send simple test email instead of preview email
                         emailService.sendSimpleEmail(email, "Test Email from AuthController",
-                                        "This is a test email from the AuthController to verify email functionality is working correctly.");
+                                        "This is a test email from the AuthController to verify email functionality is working correctly.")
+                                        .exceptionally(throwable -> {
+                                                log.error("Failed to send test email to: {}",
+                                                                LoggingUtil.maskEmail(email), throwable);
+                                                return null;
+                                        });
 
                         // Log the test email attempt
                         auditService.logUserActionAsync(

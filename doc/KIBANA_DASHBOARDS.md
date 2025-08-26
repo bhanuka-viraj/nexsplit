@@ -380,10 +380,18 @@ correlationId: "your-correlation-id-here"
 
 ### Filebeat Issues
 
-1. Check Filebeat logs: `docker logs nexsplit-filebeat`
+1. Check Filebeat logs: `docker logs nexsplit-filebeat-debug`
 2. Verify log file exists: `docker exec nexsplit-app ls -la /app/logs/structured-logs.json`
-3. Check Filebeat configuration in docker-compose.yml
-4. Restart Filebeat: `docker restart nexsplit-filebeat`
+3. Check Filebeat configuration in docker-compose.debug.yml
+4. **If Filebeat fails to start due to Kibana not being ready:**
+   ```bash
+   # Wait for Kibana to be healthy, then restart Filebeat
+   docker-compose -f docker-compose.debug.yml up filebeat -d
+   ```
+5. **Alternative restart method:**
+   ```bash
+   docker restart nexsplit-filebeat-debug
+   ```
 
 ## Support
 
@@ -408,8 +416,11 @@ curl http://localhost:9200/_cluster/health
 curl http://localhost:9200/_cat/indices?v
 
 # Check Filebeat logs
-docker logs nexsplit-filebeat
+docker logs nexsplit-filebeat-debug
 
-# Restart Filebeat if needed
-docker restart nexsplit-filebeat
+# Restart Filebeat if needed (wait for Kibana to be healthy first)
+docker-compose -f docker-compose.debug.yml up filebeat -d
+
+# Alternative restart method
+docker restart nexsplit-filebeat-debug
 ```
