@@ -5,13 +5,14 @@
 1. [System Overview](#system-overview)
 2. [Database Schema](#database-schema)
 3. [API Endpoints](#api-endpoints)
-4. [Settlement Algorithms](#settlement-algorithms)
-5. [Real-Time Updates](#real-time-updates)
-6. [Implementation Architecture](#implementation-architecture)
-7. [Response Consistency Mechanism](#response-consistency-mechanism)
-8. [Performance & Monitoring](#performance--monitoring)
-9. [Testing Strategy](#testing-strategy)
-10. [Deployment](#deployment)
+4. [Settlement Processing](#settlement-processing)
+5. [Settlement Algorithms](#settlement-algorithms)
+6. [Real-Time Updates](#real-time-updates)
+7. [Implementation Architecture](#implementation-architecture)
+8. [Response Consistency Mechanism](#response-consistency-mechanism)
+9. [Performance & Monitoring](#performance--monitoring)
+10. [Testing Strategy](#testing-strategy)
+11. [Deployment](#deployment)
 
 ## Overview
 
@@ -328,12 +329,26 @@ GET    /api/v1/nex/{nexId}/expenses/summary     - Get expense summary
 ### **💸 Debts & Settlements Endpoints**
 
 ```
+# Debt Management
 GET    /api/v1/debts                            - List user's debts
 GET    /api/v1/debts/summary                    - Get debt summary
 POST   /api/v1/debts/{debtId}/settle            - Mark debt as settled
+
+# Nex-Specific Debts
 GET    /api/v1/nex/{nexId}/debts                - List debts for specific nex
+
+# Settlement Management
 GET    /api/v1/nex/{nexId}/settlements          - Get settlement summary
 POST   /api/v1/nex/{nexId}/settlements/execute  - Execute settlements
+GET    /api/v1/nex/{nexId}/settlements/available - Get available settlements for execution
+
+# Settlement History (Database Views)
+GET    /api/v1/nex/{nexId}/settlements/history  - Get settlement history (paginated)
+GET    /api/v1/nex/{nexId}/settlements/history/user/{userId} - Get user-specific settlement history
+GET    /api/v1/nex/{nexId}/settlements/analytics - Get settlement analytics
+
+# User-Specific Settlements
+GET    /api/v1/users/{userId}/settlements       - User's settlements across all nex
 ```
 
 ### **📋 Bills Endpoints**
@@ -382,12 +397,342 @@ POST   /api/v1/events/nex/{nexId}/broadcast    - Broadcast event to nex members
 ### **📈 Reports & Analytics Endpoints**
 
 ```
+# Expense Analytics
 GET    /api/v1/nex/{nexId}/expenses/analytics   - Expense analytics
+GET    /api/v1/nex/{nexId}/expenses/summary     - Get expense summary
+
+# Debt Analytics
 GET    /api/v1/nex/{nexId}/debts/summary        - Debt summary
+
+# Settlement Analytics
+GET    /api/v1/nex/{nexId}/settlements/analytics - Settlement analytics
+GET    /api/v1/nex/{nexId}/settlements/summary   - Settlement summary
+
+# Reports
 GET    /api/v1/reports/export                   - Export expense reports
 GET    /api/v1/nex/{nexId}/reports/monthly      - Monthly expense report
 GET    /api/v1/nex/{nexId}/reports/category     - Category-wise report
+GET    /api/v1/nex/{nexId}/reports/settlements  - Settlement report
 ```
+
+## Settlement Processing
+
+### **🎯 Settlement Processing Overview**
+
+The settlement processing module handles debt settlement using existing database fields without requiring additional tables. It leverages the existing `debts` table with fields like `settled_at`, `payment_method`, and `notes` to track settlements.
+
+### **🏗️ Settlement Architecture**
+
+#### **Key Design Principles**
+
+1. **No Database Changes**: Uses existing debt fields for settlement tracking
+2. **Flexible Settlement Types**: Supports both simplified and detailed settlement views
+3. **Real-time Updates**: Automatic broadcasting of settlement events
+4. **Audit Trail**: Complete tracking of settlement history
+5. **Performance Optimized**: Efficient algorithms with minimal database queries
+
+#### **Settlement Types**
+
+1. **DETAILED**: Shows all individual debt transactions that can be settled separately
+2. **SIMPLIFIED**: Shows minimum transactions to settle all debts (calculated from net balances)
+
+### **📊 Settlement Processing Components**
+
+#### **1. Settlement Execution Service**
+
+```java
+@Service
+@Transactional
+public class SettlementServiceImpl implements SettlementService {
+
+    @Autowired
+    private DebtRepository debtRepository;
+
+    @Autowired
+    private NexService nexService;
+
+    /**
+     * Execute settlements using existing debt fields
+     */
+    @Override
+    public SettlementExecutionResponse executeSettlements(
+            String nexId,
+            SettlementExecutionRequest request,
+            String userId) {
+
+        // Validate user has access to this nex
+        if (!nexService.isMember(nexId, userId)) {
+            throw new BusinessException("User is not a member of this nex", ErrorCode.AUTHZ_NEX_ACCESS_DENIED);
+        }
+
+        List<Debt> settledDebts = new ArrayList<>();
+        List<Debt> remainingDebts = new ArrayList<>();
+
+        if ("SIMPLIFIED".equals(request.getSettlementType())) {
+            settledDebts = executeSimplifiedSettlements(nexId, request, userId);
+        } else if ("DETAILED".equals(request.getSettlementType())) {
+            settledDebts = executeDetailedSettlements(nexId, request, userId);
+        }
+
+        // Get remaining debts
+        remainingDebts = getRemainingDebts(nexId, request.getSettlementType());
+
+        // Broadcast real-time update
+        broadcastSettlementEvent(nexId, settledDebts, userId);
+
+        return SettlementExecutionResponse.builder()
+            .executedSettlements(convertDebtsToSettlementTransactions(settledDebts))
+            .remainingSettlements(convertDebtsToSettlementTransactions(remainingDebts))
+            .totalSettledAmount(calculateTotalSettledAmount(settledDebts))
+            .settledCount(settledDebts.size())
+            .remainingCount(remainingDebts.size())
+            .nexId(nexId)
+            .executionDate(LocalDateTime.now())
+            .build();
+    }
+
+    /**
+     * Mark debts as settled using existing fields
+     */
+    private List<Debt> markDebtsAsSettled(
+            List<Debt> debts,
+            SettlementExecutionRequest request,
+            String userId) {
+
+        List<Debt> settledDebts = new ArrayList<>();
+
+        for (Debt debt : debts) {
+            if (debt.getSettledAt() == null) {
+                // Use existing fields to mark debt as settled
+                debt.setSettledAt(request.getSettlementDate() != null ?
+                    request.getSettlementDate() : LocalDateTime.now());
+                debt.setPaymentMethod(request.getPaymentMethod());
+                debt.setNotes(request.getNotes());
+
+                // Save debt
+                Debt savedDebt = debtRepository.save(debt);
+                settledDebts.add(savedDebt);
+
+                // Log audit event
+                logSettlementEvent(savedDebt, userId);
+            }
+        }
+
+        return settledDebts;
+    }
+}
+```
+
+#### **2. Settlement DTOs**
+
+```java
+@Data
+@Builder
+public class SettlementExecutionRequest {
+    private String settlementType; // SIMPLIFIED, DETAILED
+    private List<String> debtIds; // IDs of debts to settle
+    private String paymentMethod; // Uses existing payment_method field
+    private String notes; // Uses existing notes field
+    private LocalDateTime settlementDate; // Uses existing settled_at field
+    private boolean settleAll; // For simplified: settle all available debts
+}
+
+@Data
+@Builder
+public class SettlementExecutionResponse {
+    private List<SettlementTransaction> executedSettlements;
+    private List<SettlementTransaction> remainingSettlements;
+    private BigDecimal totalSettledAmount;
+    private int settledCount;
+    private int remainingCount;
+    private String nexId;
+    private LocalDateTime executionDate;
+}
+
+@Data
+@Builder
+public class SettlementTransaction {
+    private String id; // Debt ID
+    private String fromUserId; // Debtor ID
+    private String toUserId; // Creditor ID
+    private BigDecimal amount;
+    private SettlementType settlementType; // SIMPLIFIED, DETAILED
+    private SettlementStatus status; // PENDING, SETTLED (based on settledAt)
+    private List<String> relatedDebtIds; // For simplified: list of debt IDs
+    private String expenseId; // From debt
+    private String expenseTitle; // From related expense
+
+    public enum SettlementType {
+        SIMPLIFIED, DETAILED
+    }
+
+    public enum SettlementStatus {
+        PENDING, SETTLED
+    }
+}
+```
+
+#### **3. Settlement Repository Methods**
+
+```java
+@Repository
+public interface DebtRepository extends JpaRepository<Debt, String> {
+
+    // Find unsettled debts for simplified settlement
+    @Query("SELECT d FROM Debt d WHERE d.expense.nexId = :nexId AND d.settledAt IS NULL")
+    List<Debt> findUnsettledDebtsForSimplifiedSettlement(@Param("nexId") String nexId);
+
+    // Find unsettled debts by nex
+    @Query("SELECT d FROM Debt d WHERE d.expense.nexId = :nexId AND d.settledAt IS NULL")
+    List<Debt> findUnsettledByNexId(@Param("nexId") String nexId);
+
+    // Find settled debts with pagination (using existing settledAt field)
+    @Query("SELECT d FROM Debt d WHERE d.expense.nexId = :nexId AND d.settledAt IS NOT NULL")
+    Page<Debt> findSettledDebtsByNexId(@Param("nexId") String nexId, Pageable pageable);
+
+    // Find debts by expense
+    @Query("SELECT d FROM Debt d WHERE d.expenseId = :expenseId")
+    List<Debt> findByExpenseId(@Param("expenseId") String expenseId);
+}
+```
+
+#### **4. Settlement Controller**
+
+```java
+@RestController
+@RequestMapping("/api/v1/nex/{nexId}/settlements")
+public class SettlementController {
+
+    /**
+     * Execute settlements by marking debts as settled
+     */
+    @PostMapping("/execute")
+    public ResponseEntity<ApiResponse<SettlementExecutionResponse>> executeSettlements(
+            @PathVariable String nexId,
+            @RequestBody SettlementExecutionRequest request,
+            @AuthenticationPrincipal String userId) {
+
+        SettlementExecutionResponse response = settlementService.executeSettlements(
+            nexId, request, userId);
+
+        return ResponseEntity.ok(ApiResponse.success(response, "Settlements executed successfully"));
+    }
+
+    /**
+     * Get available settlements for execution
+     */
+    @GetMapping("/available")
+    public ResponseEntity<ApiResponse<AvailableSettlementsResponse>> getAvailableSettlements(
+            @PathVariable String nexId,
+            @RequestParam(defaultValue = "SIMPLIFIED") String settlementType,
+            @AuthenticationPrincipal String userId) {
+
+        AvailableSettlementsResponse response = settlementService.getAvailableSettlements(
+            nexId, settlementType, userId);
+
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    /**
+     * Get settlement history (from settled debts)
+     */
+    @GetMapping("/history")
+    public ResponseEntity<ApiResponse<PaginatedResponse<SettlementHistoryResponse>>> getSettlementHistory(
+            @PathVariable String nexId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @AuthenticationPrincipal String userId) {
+
+        PaginatedResponse<SettlementHistoryResponse> response = settlementService.getSettlementHistory(
+            nexId, page, size, userId);
+
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+}
+```
+
+### **📝 Settlement Processing Examples**
+
+#### **Simplified Settlement Scenarios**
+
+```json
+// 1. Settle all simplified settlements
+POST /api/v1/nex/{nexId}/settlements/execute
+{
+  "settlementType": "SIMPLIFIED",
+  "settleAll": true,
+  "paymentMethod": "BANK_TRANSFER",
+  "notes": "Monthly settlement",
+  "settlementDate": "2024-01-15T10:30:00"
+}
+
+// 2. Settle specific debts (for simplified view)
+POST /api/v1/nex/{nexId}/settlements/execute
+{
+  "settlementType": "SIMPLIFIED",
+  "debtIds": ["debt-1", "debt-3", "debt-5"],
+  "paymentMethod": "CASH",
+  "notes": "Partial settlement",
+  "settlementDate": "2024-01-15T10:30:00"
+}
+```
+
+#### **Detailed Settlement Scenarios**
+
+```json
+// Settle specific debts individually
+POST /api/v1/nex/{nexId}/settlements/execute
+{
+  "settlementType": "DETAILED",
+  "debtIds": ["debt-1", "debt-5", "debt-8"],
+  "paymentMethod": "DIGITAL_WALLET",
+  "notes": "Settling specific expenses",
+  "settlementDate": "2024-01-15T10:30:00"
+}
+```
+
+#### **Get Settlement History**
+
+```json
+GET /api/v1/nex/{nexId}/settlements/history?page=0&size=20
+
+// Response
+{
+  "success": true,
+  "data": {
+    "data": [
+      {
+        "debtId": "debt-1",
+        "expenseId": "expense-1",
+        "expenseTitle": "Dinner",
+        "fromUserId": "user-1",
+        "toUserId": "user-2",
+        "amount": 25.00,
+        "paymentMethod": "CASH",
+        "notes": "Settled at restaurant",
+        "settledAt": "2024-01-15T10:30:00",
+        "settledBy": "user-1"
+      }
+    ],
+    "pagination": {
+      "page": 0,
+      "size": 20,
+      "totalElements": 45,
+      "totalPages": 3
+    }
+  }
+}
+```
+
+### **🔧 Settlement Processing Benefits**
+
+1. **No Database Changes**: Uses existing debt fields (`settled_at`, `payment_method`, `notes`)
+2. **No New Tables**: Everything works with the current schema
+3. **Backward Compatible**: Existing data remains intact
+4. **Simple Implementation**: Leverages existing debt structure
+5. **Flexible Settlement**: Supports both simplified and detailed views
+6. **Historical Data**: Settlement history available from settled debts
+7. **Performance**: No additional joins or complex queries
 
 ## Settlement Algorithms
 
