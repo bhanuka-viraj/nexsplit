@@ -182,7 +182,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
                 .orElseThrow(() -> new SecurityException("User not found"));
 
         // Generate new access token
-        String newAccessToken = jwtUtil.generateAccessToken(user.getEmail(), "USER");
+        String newAccessToken = jwtUtil.generateAccessToken(user.getId(), user.getEmail(), "USER");
 
         // Generate new refresh token in the same family (token rotation)
         String newRefreshToken = generateRefreshTokenInSameFamily(userId, familyId, userAgent);

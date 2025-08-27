@@ -152,7 +152,7 @@ public class AuditServiceImpl implements AuditService {
             // Create audit event entity
             AuditEvent auditEvent = AuditEvent.builder()
                     .id(UUID.randomUUID().toString())
-                    .userId("SYSTEM") // System events don't have a specific user
+                    .userId(null) // System events don't have a specific user (NULL is allowed by FK constraint)
                     .eventType(eventType)
                     .eventCategory("SYSTEM")
                     .eventDetails(details)

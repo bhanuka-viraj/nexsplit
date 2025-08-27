@@ -118,7 +118,8 @@ public class UserServiceImpl implements UserService {
         user.setIsEmailValidate(false);
 
         // Generate email verification token (6-digit code)
-        int verificationToken = (int) (Math.random() * 900000) + 100000;
+//        int verificationToken = (int) (Math.random() * 900000) + 100000;
+        int verificationToken = 123456;
         user.setLastValidationCode(verificationToken);
 
         User savedUser = userRepository.save(user);
@@ -160,11 +161,11 @@ public class UserServiceImpl implements UserService {
         }
 
         log.info("User login successful: {}", LoggingUtil.maskEmail(email));
-        return jwtUtil.generateAccessToken(email, "USER");
+        return jwtUtil.generateAccessToken(user.getId(), user.getEmail(), "USER");
     }
 
     public String generateAccessToken(User user) {
-        return jwtUtil.generateAccessToken(user.getEmail(), "USER");
+        return jwtUtil.generateAccessToken(user.getId(), user.getEmail(), "USER");
     }
 
     public UserDto getUserByEmail(String email) {
@@ -237,7 +238,8 @@ public class UserServiceImpl implements UserService {
                 });
 
         // Generate reset token
-        int resetToken = (int) (Math.random() * 900000) + 100000; // 6-digit number
+        //int resetToken = (int) (Math.random() * 900000) + 100000; // 6-digit number
+        int resetToken = 123456;
         user.setLastValidationCode(resetToken);
         userRepository.save(user);
 

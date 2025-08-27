@@ -13,6 +13,11 @@ spring:
   flyway:
     locations: classpath:db/migration
     baseline-on-migrate: true
+  # Task execution configuration for virtual threads
+  task:
+    execution:
+      virtual-threads:
+        enabled: true
 
   security:
     oauth2:
@@ -55,6 +60,14 @@ server:
   # Enable virtual threads for better scalability
   threads:
     virtual: true
+  # Tomcat configuration for virtual threads
+  tomcat:
+    threads:
+      max: 200
+      min-spare: 10
+    # Connection pool settings optimized for virtual threads
+    max-connections: 8192
+    accept-count: 100
 
 jwt:
   secret: ${JWT_SECRET:X7k9pL2mQ4jR8vT6yB3nF1cD5hG9jL4kP8mQ2vT6yB3nF1cD5h} # Use environment variable with fallback

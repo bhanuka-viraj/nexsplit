@@ -59,17 +59,17 @@ public class JwtFilter extends OncePerRequestFilter {
 
         if (jwtUtil.validateToken(token)) {
             if (SecurityContextHolder.getContext().getAuthentication() == null) {
-                String email = jwtUtil.getEmailFromToken(token);
+                String userId = jwtUtil.getUserIdFromToken(token);
                 String role = jwtUtil.getRoleFromToken(token);
 
                 // Load UserDetails from the database
-                UserDetails userDetails = userDetailsService.loadUserByUsername(email);
+                UserDetails userDetails = userDetailsService.loadUserByUsername(userId);
 
                 UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
                         userDetails, null, userDetails.getAuthorities());
                 auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(auth);
-                log.info("Authenticated user: {} with role: {}", LoggingUtil.maskEmail(email), role);
+                log.info("Authenticated user with ID: {} and role: {}", userId, role);
             }
         } else {
             log.warn("Invalid or expired JWT token");

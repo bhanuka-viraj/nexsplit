@@ -68,7 +68,7 @@ public class NexServiceImpl implements NexService {
                 .user(user)
                 .role(NexMember.MemberRole.ADMIN)
                 .status(NexMember.MemberStatus.ACTIVE)
-                .joinedAt(LocalDateTime.now())
+                .joinedAt(java.time.LocalDateTime.now())
                 .build();
 
         nexMemberRepository.save(creatorMember);
@@ -109,7 +109,7 @@ public class NexServiceImpl implements NexService {
             throw new BusinessException("Only admins can update nex", ErrorCode.AUTHZ_INSUFFICIENT_PERMISSIONS);
         }
 
-        Nex nex = nexRepository.findById(nexId)
+        Nex nex = nexRepository.findByIdAndNotDeleted(nexId)
                 .orElseThrow(() -> new BusinessException("Nex not found", ErrorCode.NEX_NOT_FOUND));
 
         nexMapper.updateEntityFromRequest(request, nex);
@@ -122,23 +122,24 @@ public class NexServiceImpl implements NexService {
     @Override
     @Transactional
     public void deleteNex(String nexId, String userId) {
-        log.info("Deleting nex: {} by user: {}", nexId, userId);
+        log.info("Soft deleting nex: {} by user: {}", nexId, userId);
 
         // Check if user is admin
         if (!isAdmin(nexId, userId)) {
             throw new BusinessException("Only admins can delete nex", ErrorCode.AUTHZ_INSUFFICIENT_PERMISSIONS);
         }
 
-        Nex nex = nexRepository.findById(nexId)
+        // Check if nex exists and is not deleted
+        Nex nex = nexRepository.findByIdAndNotDeleted(nexId)
                 .orElseThrow(() -> new BusinessException("Nex not found", ErrorCode.NEX_NOT_FOUND));
 
-        // Delete all members first (cascade delete)
-        nexMemberRepository.deleteByNexId(nexId);
+        // Soft delete all members first
+        nexMemberRepository.softDeleteByNexId(nexId);
 
-        // Delete the nex
-        nexRepository.delete(nex);
+        // Soft delete the nex
+        nexRepository.softDeleteById(nexId, userId);
 
-        log.info("Nex deleted successfully: {}", nexId);
+        log.info("Nex soft deleted successfully: {}", nexId);
     }
 
     @Override
@@ -193,7 +194,7 @@ public class NexServiceImpl implements NexService {
             throw new BusinessException("Access denied", ErrorCode.AUTHZ_NEX_ACCESS_DENIED);
         }
 
-        Nex nex = nexRepository.findById(nexId)
+        Nex nex = nexRepository.findByIdAndNotDeleted(nexId)
                 .orElseThrow(() -> new BusinessException("Nex not found", ErrorCode.NEX_NOT_FOUND));
 
         // Get member count

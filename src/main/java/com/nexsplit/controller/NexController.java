@@ -41,7 +41,7 @@ public class NexController {
 
         String userId = userDetails.getUsername();
 
-        // Log business event
+//         Log business event
         StructuredLoggingUtil.logBusinessEvent(
                 "NEX_CREATED",
                 userId,

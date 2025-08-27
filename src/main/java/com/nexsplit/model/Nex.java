@@ -2,21 +2,22 @@ package com.nexsplit.model;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.experimental.SuperBuilder;
 import org.hibernate.annotations.GenericGenerator;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 @Entity
 @Table(name = "nex")
 @Data
-@Builder
+@SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-public class Nex {
+@EqualsAndHashCode(callSuper = true)
+public class Nex extends BaseEntity {
 
     @Id
     @GeneratedValue(generator = "uuid2")
@@ -40,18 +41,12 @@ public class Nex {
     @Column(name = "settlement_type", nullable = false)
     private SettlementType settlementType;
 
-    @Column(name = "is_archived", nullable = false)
-    private Boolean isArchived;
-
     @Enumerated(EnumType.STRING)
     @Column(name = "nex_type", nullable = false)
     private NexType nexType;
 
-    @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt;
-
-    @Column(name = "modified_at", nullable = false)
-    private LocalDateTime modifiedAt;
+    @Column(name = "is_archived", nullable = false)
+    private Boolean isArchived;
 
     // Relationships
     @ManyToOne(fetch = FetchType.LAZY)
@@ -80,21 +75,14 @@ public class Nex {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        modifiedAt = LocalDateTime.now();
-        if (isArchived == null) {
-            isArchived = false;
-        }
         if (settlementType == null) {
             settlementType = SettlementType.DETAILED;
         }
         if (nexType == null) {
             nexType = NexType.GROUP;
         }
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        modifiedAt = LocalDateTime.now();
+        if (isArchived == null) {
+            isArchived = false;
+        }
     }
 }

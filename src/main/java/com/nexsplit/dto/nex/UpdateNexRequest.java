@@ -23,8 +23,7 @@ public class UpdateNexRequest {
     private String imageUrl;
 
     private Nex.SettlementType settlementType;
-
+    private Boolean isArchived;
     private Nex.NexType nexType;
 
-    private Boolean isArchived;
 }

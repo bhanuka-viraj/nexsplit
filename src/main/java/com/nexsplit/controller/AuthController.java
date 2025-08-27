@@ -749,18 +749,21 @@ public class AuthController {
                                                 "Invalid email format. Please provide a valid email address."));
                         }
 
-                        // Send simple test email instead of preview email
-                        emailService.sendSimpleEmail(email, "Test Email from AuthController",
-                                        "This is a test email from the AuthController to verify email functionality is working correctly.")
-                                        .exceptionally(throwable -> {
-                                                log.error("Failed to send test email to: {}",
-                                                                LoggingUtil.maskEmail(email), throwable);
-                                                return null;
-                                        });
+                        // Send simple test email
+                        CompletableFuture<Void> emailFuture = emailService.sendSimpleEmail(email,
+                                        "Test Email from AuthController",
+                                        "This is a test email from the AuthController to verify email functionality is working correctly.");
 
-                        // Log the test email attempt
-                        auditService.logUserActionAsync(
-                                        email,
+                        // Wait for the email to be sent
+                        try {
+                                emailFuture.get(); // Wait for the async operation to complete
+                        } catch (Exception e) {
+                                log.error("Email sending failed: {}", e.getMessage(), e);
+                                throw new RuntimeException("Failed to send test email", e);
+                        }
+
+                        // Log the test email attempt as a system event
+                        auditService.logSystemEventAsync(
                                         "EMAIL_TEST_SENT",
                                         "Test email sent to " + LoggingUtil.maskEmail(email) + " from "
                                                         + getClientIpAddress(httpRequest));

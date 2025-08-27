@@ -7,21 +7,34 @@ package com.nexsplit.util;
 public class LoggingUtil {
 
     /**
-     * Mask email address for security in logs
+     * Mask email address or user ID for security in logs
      * Example: user@example.com -> u***@example.com
+     * Example: 123e4567-e89b-12d3-a456-426614174000 -> 123e***-426614174000
      * 
-     * @param email The email address to mask
-     * @return Masked email address safe for logging
+     * @param identifier The email address or user ID to mask
+     * @return Masked identifier safe for logging
      */
-    public static String maskEmail(String email) {
-        if (email == null || email.isEmpty()) {
+    public static String maskEmail(String identifier) {
+        if (identifier == null || identifier.isEmpty()) {
             return "***";
         }
-        int atIndex = email.indexOf('@');
-        if (atIndex <= 1) {
-            return "***" + email.substring(atIndex);
+
+        // Check if it's an email address (contains @)
+        int atIndex = identifier.indexOf('@');
+        if (atIndex > 0) {
+            // It's an email address
+            if (atIndex <= 1) {
+                return "***" + identifier.substring(atIndex);
+            }
+            return identifier.charAt(0) + "***" + identifier.substring(atIndex);
+        } else {
+            // It's a user ID (UUID or other identifier)
+            if (identifier.length() <= 8) {
+                return "***";
+            }
+            // Show first 4 and last 4 characters
+            return identifier.substring(0, 4) + "***" + identifier.substring(identifier.length() - 4);
         }
-        return email.charAt(0) + "***" + email.substring(atIndex);
     }
 
     /**
@@ -38,6 +51,24 @@ public class LoggingUtil {
             return "***";
         }
         return data.substring(0, 4) + "***" + data.substring(data.length() - 4);
+    }
+
+    /**
+     * Mask user ID for security in logs
+     * Example: 123e4567-e89b-12d3-a456-426614174000 -> 123e***-426614174000
+     * 
+     * @param userId The user ID to mask
+     * @return Masked user ID safe for logging
+     */
+    public static String maskUserId(String userId) {
+        if (userId == null || userId.isEmpty()) {
+            return "***";
+        }
+        if (userId.length() <= 8) {
+            return "***";
+        }
+        // Show first 4 and last 4 characters
+        return userId.substring(0, 4) + "***" + userId.substring(userId.length() - 4);
     }
 
     /**

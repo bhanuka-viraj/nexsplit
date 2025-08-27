@@ -36,7 +36,7 @@ public class StructuredLoggingUtil {
         logData.put("timestamp", Instant.now().toString());
         logData.put("correlationId", getCorrelationId());
         logData.put("eventType", eventType);
-        logData.put("userId", LoggingUtil.maskEmail(userId));
+        logData.put("userId", LoggingUtil.maskUserId(userId));
         logData.put("action", action);
         logData.put("result", result);
         logData.put("level", "INFO");
@@ -65,7 +65,7 @@ public class StructuredLoggingUtil {
         logData.put("correlationId", getCorrelationId());
         logData.put("eventType", eventType);
         logData.put("category", "SECURITY");
-        logData.put("userId", LoggingUtil.maskEmail(userId));
+        logData.put("userId", LoggingUtil.maskUserId(userId));
         logData.put("ipAddress", ipAddress);
         logData.put("userAgent", userAgent);
         logData.put("severity", severity);
@@ -157,7 +157,7 @@ public class StructuredLoggingUtil {
         logData.put("uri", uri);
         logData.put("statusCode", statusCode);
         logData.put("durationMs", durationMs);
-        logData.put("userId", LoggingUtil.maskEmail(userId));
+        logData.put("userId", LoggingUtil.maskUserId(userId));
         logData.put("ipAddress", ipAddress);
         logData.put("level", statusCode >= 400 ? "WARN" : "INFO");
 

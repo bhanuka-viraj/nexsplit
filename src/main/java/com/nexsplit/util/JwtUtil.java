@@ -32,9 +32,20 @@ public class JwtUtil {
         this.refreshTokenExpirationDays = refreshTokenExpirationDays;
     }
 
-    public String generateAccessToken(String email, String role) {
+    public String generateAccessToken(String userId, String role) {
         return Jwts.builder()
-                .subject(email)
+                .subject(userId)
+                .claim("role", role)
+                .issuedAt(Date.from(Instant.now()))
+                .expiration(Date.from(Instant.now().plus(accessTokenExpirationMinutes, ChronoUnit.MINUTES)))
+                .signWith(secretKey)
+                .compact();
+    }
+
+    public String generateAccessToken(String userId, String email, String role) {
+        return Jwts.builder()
+                .subject(userId)
+                .claim("email", email)
                 .claim("role", role)
                 .issuedAt(Date.from(Instant.now()))
                 .expiration(Date.from(Instant.now().plus(accessTokenExpirationMinutes, ChronoUnit.MINUTES)))
@@ -68,8 +79,16 @@ public class JwtUtil {
                 .compact();
     }
 
-    public String getEmailFromToken(String token) {
+    public String getUserIdFromToken(String token) {
         return parseClaims(token).getSubject();
+    }
+
+    /**
+     * Get email from token (for backward compatibility)
+     * Note: Email is now stored as a claim, not as subject
+     */
+    public String getEmailFromToken(String token) {
+        return parseClaims(token).get("email", String.class);
     }
 
     public String getRoleFromToken(String token) {

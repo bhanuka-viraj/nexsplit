@@ -2,21 +2,22 @@ package com.nexsplit.model;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.experimental.SuperBuilder;
 import org.hibernate.annotations.GenericGenerator;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 @Entity
 @Table(name = "categories")
 @Data
-@Builder
+@SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-public class Category {
+@EqualsAndHashCode(callSuper = true)
+public class Category extends BaseEntity {
 
     @Id
     @GeneratedValue(generator = "uuid2")
@@ -36,12 +37,6 @@ public class Category {
     @Column(name = "is_default", nullable = false)
     private Boolean isDefault;
 
-    @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt;
-
-    @Column(name = "modified_at", nullable = false)
-    private LocalDateTime modifiedAt;
-
     // Relationships
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by", insertable = false, updatable = false)
@@ -56,15 +51,8 @@ public class Category {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        modifiedAt = LocalDateTime.now();
         if (isDefault == null) {
             isDefault = false;
         }
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        modifiedAt = LocalDateTime.now();
     }
 }
