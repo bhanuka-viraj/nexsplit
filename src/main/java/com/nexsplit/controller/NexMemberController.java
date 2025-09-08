@@ -2,6 +2,7 @@ package com.nexsplit.controller;
 
 import com.nexsplit.config.ApiConfig;
 import com.nexsplit.dto.ApiResponse;
+import com.nexsplit.dto.PaginatedResponse;
 import com.nexsplit.dto.nex.InviteMemberRequest;
 import com.nexsplit.dto.nex.NexMemberDto;
 import com.nexsplit.dto.nex.UpdateMemberRoleRequest;
@@ -28,106 +29,109 @@ import java.util.Map;
 @Slf4j
 public class NexMemberController {
 
-    private final NexMemberService nexMemberService;
+        private final NexMemberService nexMemberService;
 
-    @PostMapping("/invite")
-    @Operation(summary = "Invite Member", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<ApiResponse<Void>> inviteMember(
-            @PathVariable String nexId,
-            @Valid @RequestBody InviteMemberRequest request,
-            @AuthenticationPrincipal UserDetails userDetails) {
+        @PostMapping("/invite")
+        @Operation(summary = "Invite Member", security = @SecurityRequirement(name = "bearerAuth"))
+        public ResponseEntity<ApiResponse<Void>> inviteMember(
+                        @PathVariable String nexId,
+                        @Valid @RequestBody InviteMemberRequest request,
+                        @AuthenticationPrincipal UserDetails userDetails) {
 
-        String inviterId = userDetails.getUsername();
+                String inviterId = userDetails.getUsername();
 
-        // Log business event
-        StructuredLoggingUtil.logBusinessEvent(
-                "MEMBER_INVITED",
-                inviterId,
-                "INVITE_MEMBER",
-                "SUCCESS",
-                Map.of("nexId", nexId, "inviteeEmail", request.getEmail(), "role", request.getRole().name()));
+                // Log business event
+                StructuredLoggingUtil.logBusinessEvent(
+                                "MEMBER_INVITED",
+                                inviterId,
+                                "INVITE_MEMBER",
+                                "SUCCESS",
+                                Map.of("nexId", nexId, "inviteeEmail", request.getEmail(), "role",
+                                                request.getRole().name()));
 
-        nexMemberService.inviteMember(nexId, request, inviterId);
+                nexMemberService.inviteMember(nexId, request, inviterId);
 
-        return ResponseEntity.ok(ApiResponse.success(null, "Member invited successfully"));
-    }
+                return ResponseEntity.ok(ApiResponse.success(null, "Member invited successfully"));
+        }
 
-    @PutMapping("/{memberId}/role")
-    @Operation(summary = "Update Member Role", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<ApiResponse<Void>> updateMemberRole(
-            @PathVariable String nexId,
-            @PathVariable String memberId,
-            @Valid @RequestBody UpdateMemberRoleRequest request,
-            @AuthenticationPrincipal UserDetails userDetails) {
+        @PutMapping("/{memberId}/role")
+        @Operation(summary = "Update Member Role", security = @SecurityRequirement(name = "bearerAuth"))
+        public ResponseEntity<ApiResponse<Void>> updateMemberRole(
+                        @PathVariable String nexId,
+                        @PathVariable String memberId,
+                        @Valid @RequestBody UpdateMemberRoleRequest request,
+                        @AuthenticationPrincipal UserDetails userDetails) {
 
-        String adminId = userDetails.getUsername();
+                String adminId = userDetails.getUsername();
 
-        // Log business event
-        StructuredLoggingUtil.logBusinessEvent(
-                "MEMBER_ROLE_UPDATED",
-                adminId,
-                "UPDATE_MEMBER_ROLE",
-                "SUCCESS",
-                Map.of("nexId", nexId, "memberId", memberId, "newRole", request.getRole().name()));
+                // Log business event
+                StructuredLoggingUtil.logBusinessEvent(
+                                "MEMBER_ROLE_UPDATED",
+                                adminId,
+                                "UPDATE_MEMBER_ROLE",
+                                "SUCCESS",
+                                Map.of("nexId", nexId, "memberId", memberId, "newRole", request.getRole().name()));
 
-        nexMemberService.updateMemberRole(nexId, memberId, request, adminId);
+                nexMemberService.updateMemberRole(nexId, memberId, request, adminId);
 
-        return ResponseEntity.ok(ApiResponse.success(null, "Member role updated successfully"));
-    }
+                return ResponseEntity.ok(ApiResponse.success(null, "Member role updated successfully"));
+        }
 
-    @DeleteMapping("/{memberId}")
-    @Operation(summary = "Remove Member", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<ApiResponse<Void>> removeMember(
-            @PathVariable String nexId,
-            @PathVariable String memberId,
-            @AuthenticationPrincipal UserDetails userDetails) {
+        @DeleteMapping("/{memberId}")
+        @Operation(summary = "Remove Member", security = @SecurityRequirement(name = "bearerAuth"))
+        public ResponseEntity<ApiResponse<Void>> removeMember(
+                        @PathVariable String nexId,
+                        @PathVariable String memberId,
+                        @AuthenticationPrincipal UserDetails userDetails) {
 
-        String adminId = userDetails.getUsername();
+                String adminId = userDetails.getUsername();
 
-        // Log business event
-        StructuredLoggingUtil.logBusinessEvent(
-                "MEMBER_REMOVED",
-                adminId,
-                "REMOVE_MEMBER",
-                "SUCCESS",
-                Map.of("nexId", nexId, "memberId", memberId));
+                // Log business event
+                StructuredLoggingUtil.logBusinessEvent(
+                                "MEMBER_REMOVED",
+                                adminId,
+                                "REMOVE_MEMBER",
+                                "SUCCESS",
+                                Map.of("nexId", nexId, "memberId", memberId));
 
-        nexMemberService.removeMember(nexId, memberId, adminId);
+                nexMemberService.removeMember(nexId, memberId, adminId);
 
-        return ResponseEntity.ok(ApiResponse.success(null, "Member removed successfully"));
-    }
+                return ResponseEntity.ok(ApiResponse.success(null, "Member removed successfully"));
+        }
 
-    @PostMapping("/leave")
-    @Operation(summary = "Leave Nex", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<ApiResponse<Void>> leaveNex(
-            @PathVariable String nexId,
-            @AuthenticationPrincipal UserDetails userDetails) {
+        @PostMapping("/leave")
+        @Operation(summary = "Leave Nex", security = @SecurityRequirement(name = "bearerAuth"))
+        public ResponseEntity<ApiResponse<Void>> leaveNex(
+                        @PathVariable String nexId,
+                        @AuthenticationPrincipal UserDetails userDetails) {
 
-        String userId = userDetails.getUsername();
+                String userId = userDetails.getUsername();
 
-        // Log business event
-        StructuredLoggingUtil.logBusinessEvent(
-                "USER_LEFT_NEX",
-                userId,
-                "LEAVE_NEX",
-                "SUCCESS",
-                Map.of("nexId", nexId));
+                // Log business event
+                StructuredLoggingUtil.logBusinessEvent(
+                                "USER_LEFT_NEX",
+                                userId,
+                                "LEAVE_NEX",
+                                "SUCCESS",
+                                Map.of("nexId", nexId));
 
-        nexMemberService.leaveNex(nexId, userId);
+                nexMemberService.leaveNex(nexId, userId);
 
-        return ResponseEntity.ok(ApiResponse.success(null, "Left nex successfully"));
-    }
+                return ResponseEntity.ok(ApiResponse.success(null, "Left nex successfully"));
+        }
 
-    @GetMapping
-    @Operation(summary = "List Nex Members", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<ApiResponse<List<NexMemberDto>>> getNexMembers(
-            @PathVariable String nexId,
-            @AuthenticationPrincipal UserDetails userDetails) {
+        @GetMapping
+        @Operation(summary = "List Nex Members", security = @SecurityRequirement(name = "bearerAuth"))
+        public ResponseEntity<ApiResponse<PaginatedResponse<NexMemberDto>>> getNexMembers(
+                        @PathVariable String nexId,
+                        @RequestParam(defaultValue = "0") int page,
+                        @RequestParam(defaultValue = "10") int size,
+                        @AuthenticationPrincipal UserDetails userDetails) {
 
-        String userId = userDetails.getUsername();
+                String userId = userDetails.getUsername();
 
-        List<NexMemberDto> members = nexMemberService.getNexMembers(nexId, userId);
+                PaginatedResponse<NexMemberDto> response = nexMemberService.getNexMembers(nexId, userId, page, size);
 
-        return ResponseEntity.ok(ApiResponse.success(members, "Members retrieved successfully"));
-    }
+                return ResponseEntity.ok(ApiResponse.success(response, "Members retrieved successfully"));
+        }
 }

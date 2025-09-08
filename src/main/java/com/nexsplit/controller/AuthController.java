@@ -514,7 +514,7 @@ public class AuthController {
                         User user = userServiceImpl.getUserByEmailForVerification(email);
 
                         // Confirm email using the code
-                        User confirmedUser = userServiceImpl.confirmEmail(code);
+                        User confirmedUser = userServiceImpl.confirmEmail(code, user);
 
                         // Verify that the confirmed user matches the requested email
                         if (!confirmedUser.getEmail().equals(email)) {

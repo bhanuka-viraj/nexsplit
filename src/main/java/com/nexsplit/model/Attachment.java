@@ -18,8 +18,7 @@ import java.time.LocalDateTime;
 public class Attachment {
 
     @Id
-    @GeneratedValue(generator = "uuid2")
-    @GenericGenerator(name = "uuid2", strategy = "uuid2")
+    @GeneratedValue(strategy = GenerationType.UUID)
     @Column(columnDefinition = "CHAR(36)")
     private String id;
 

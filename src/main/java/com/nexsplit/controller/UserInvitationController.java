@@ -2,6 +2,7 @@ package com.nexsplit.controller;
 
 import com.nexsplit.config.ApiConfig;
 import com.nexsplit.dto.ApiResponse;
+import com.nexsplit.dto.PaginatedResponse;
 import com.nexsplit.dto.nex.InvitationDto;
 import com.nexsplit.service.NexMemberService;
 import com.nexsplit.util.StructuredLoggingUtil;
@@ -15,7 +16,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -29,14 +29,16 @@ public class UserInvitationController {
 
     @GetMapping("/pending")
     @Operation(summary = "Get Pending Invitations", security = @SecurityRequirement(name = "bearerAuth"))
-    public ResponseEntity<ApiResponse<List<InvitationDto>>> getPendingInvitations(
+    public ResponseEntity<ApiResponse<PaginatedResponse<InvitationDto>>> getPendingInvitations(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
             @AuthenticationPrincipal UserDetails userDetails) {
 
         String userId = userDetails.getUsername();
 
-        List<InvitationDto> pendingInvitations = nexMemberService.getPendingInvitations(userId);
+        PaginatedResponse<InvitationDto> response = nexMemberService.getPendingInvitations(userId, page, size);
 
-        return ResponseEntity.ok(ApiResponse.success(pendingInvitations, "Pending invitations retrieved successfully"));
+        return ResponseEntity.ok(ApiResponse.success(response, "Pending invitations retrieved successfully"));
     }
 
     @PostMapping("/{nexId}/respond")

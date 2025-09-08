@@ -6,8 +6,11 @@ import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import javax.crypto.SecretKey;
+import jakarta.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -89,6 +92,35 @@ public class JwtUtil {
      */
     public String getEmailFromToken(String token) {
         return parseClaims(token).get("email", String.class);
+    }
+
+    /**
+     * Extract email from the current JWT token in the request context
+     * This is useful for controllers that need the email but only have UserDetails
+     */
+    public String getEmailFromCurrentToken() {
+        try {
+            ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder
+                    .getRequestAttributes();
+            if (attributes == null) {
+                log.warn("No request context available");
+                return null;
+            }
+
+            HttpServletRequest request = attributes.getRequest();
+            String authHeader = request.getHeader("Authorization");
+
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                log.warn("No valid Authorization header found");
+                return null;
+            }
+
+            String token = authHeader.substring(7);
+            return getEmailFromToken(token);
+        } catch (Exception e) {
+            log.error("Failed to extract email from current token: {}", e.getMessage());
+            return null;
+        }
     }
 
     public String getRoleFromToken(String token) {

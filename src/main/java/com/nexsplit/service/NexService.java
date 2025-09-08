@@ -6,19 +6,12 @@ import com.nexsplit.dto.nex.NexSummaryDto;
 import com.nexsplit.dto.nex.UpdateNexRequest;
 import com.nexsplit.dto.PaginatedResponse;
 
-import java.util.List;
-
 public interface NexService {
 
     /**
      * Create a new expense group (nex)
      */
     NexDto createNex(CreateNexRequest request, String userId);
-
-    /**
-     * Get all active expense groups for a user (excludes pending invitations)
-     */
-    List<NexDto> getUserNexes(String userId);
 
     /**
      * Get expense group by ID (with authorization check)

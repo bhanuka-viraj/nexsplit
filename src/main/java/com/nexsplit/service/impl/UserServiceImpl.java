@@ -118,7 +118,7 @@ public class UserServiceImpl implements UserService {
         user.setIsEmailValidate(false);
 
         // Generate email verification token (6-digit code)
-//        int verificationToken = (int) (Math.random() * 900000) + 100000;
+        // int verificationToken = (int) (Math.random() * 900000) + 100000;
         int verificationToken = 123456;
         user.setLastValidationCode(verificationToken);
 
@@ -238,7 +238,7 @@ public class UserServiceImpl implements UserService {
                 });
 
         // Generate reset token
-        //int resetToken = (int) (Math.random() * 900000) + 100000; // 6-digit number
+        // int resetToken = (int) (Math.random() * 900000) + 100000; // 6-digit number
         int resetToken = 123456;
         user.setLastValidationCode(resetToken);
         userRepository.save(user);
@@ -339,7 +339,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Transactional
-    public User confirmEmail(String confirmationToken) {
+    public User confirmEmail(String confirmationToken,User user) {
         log.info("Processing email confirmation with token: {}", LoggingUtil.maskSensitiveData(confirmationToken));
 
         // Find user by confirmation token
@@ -351,12 +351,6 @@ public class UserServiceImpl implements UserService {
             throw new IllegalArgumentException("Invalid confirmation token format");
         }
 
-        User user = userRepository.findByLastValidationCode(tokenValue)
-                .orElseThrow(() -> {
-                    log.warn("Email confirmation failed - invalid token: {}", confirmationToken);
-                    return new IllegalArgumentException("Invalid confirmation token");
-                });
-
         // Check if email is already confirmed
         if (user.getIsEmailValidate()) {
             log.warn("Email confirmation failed - email already confirmed for: {}",
@@ -364,6 +358,10 @@ public class UserServiceImpl implements UserService {
             throw new IllegalArgumentException("Email is already confirmed");
         }
 
+        if (user.getLastValidationCode() != tokenValue) {
+            log.warn("Email confirmation failed - invalid token for: {}", LoggingUtil.maskEmail(user.getEmail()));
+            throw new IllegalArgumentException("Invalid confirmation token");
+        }
         // Mark email as verified and clear the token
         user.setIsEmailValidate(true);
         user.setLastValidationCode(0); // Clear the confirmation token

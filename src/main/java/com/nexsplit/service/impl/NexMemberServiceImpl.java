@@ -1,11 +1,13 @@
 package com.nexsplit.service.impl;
 
 import com.nexsplit.dto.ErrorCode;
+import com.nexsplit.dto.PaginatedResponse;
 import com.nexsplit.dto.nex.InviteMemberRequest;
 import com.nexsplit.dto.nex.InvitationDto;
 import com.nexsplit.dto.nex.NexMemberDto;
 import com.nexsplit.dto.nex.UpdateMemberRoleRequest;
 import com.nexsplit.exception.BusinessException;
+import com.nexsplit.exception.EntityNotFoundException;
 import com.nexsplit.mapper.nex.InvitationMapper;
 import com.nexsplit.mapper.nex.NexMemberMapper;
 import com.nexsplit.model.Nex;
@@ -18,6 +20,10 @@ import com.nexsplit.repository.UserRepository;
 import com.nexsplit.service.NexMemberService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,7 +50,7 @@ public class NexMemberServiceImpl implements NexMemberService {
 
         // Validate nex exists and inviter is admin
         Nex nex = nexRepository.findById(nexId)
-                .orElseThrow(() -> new BusinessException("Nex not found", ErrorCode.NEX_NOT_FOUND));
+                .orElseThrow(() -> EntityNotFoundException.nexNotFound(nexId));
 
         // Check if inviter is admin
         if (!isAdmin(nexId, inviterId)) {
@@ -53,7 +59,8 @@ public class NexMemberServiceImpl implements NexMemberService {
 
         // Find user by email
         User userToInvite = userRepository.findActiveUserByEmail(request.getEmail())
-                .orElseThrow(() -> new BusinessException("User not found", ErrorCode.USER_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException("User not found with email: " + request.getEmail(),
+                        ErrorCode.USER_NOT_FOUND));
 
         // Check if user is already a member
         Optional<NexMember> existingMember = nexMemberRepository.findByNexIdAndUserId(nexId, userToInvite.getId());
@@ -73,6 +80,7 @@ public class NexMemberServiceImpl implements NexMemberService {
                 .user(userToInvite)
                 .role(request.getRole())
                 .status(NexMember.MemberStatus.PENDING)
+                .isDeleted(false)
                 .invitedAt(LocalDateTime.now())
                 .build();
 
@@ -87,10 +95,11 @@ public class NexMemberServiceImpl implements NexMemberService {
         log.info("Accepting invitation for user: {} to nex: {}", userId, nexId);
 
         NexMember member = nexMemberRepository.findByNexIdAndUserId(nexId, userId)
-                .orElseThrow(() -> new BusinessException("Invitation not found", ErrorCode.NEX_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException("No pending invitation found for this user",
+                        ErrorCode.NEX_NOT_FOUND));
 
         if (member.getStatus() != NexMember.MemberStatus.PENDING) {
-            throw new BusinessException("No pending invitation found", ErrorCode.NEX_NOT_FOUND);
+            throw new BusinessException("No pending invitation found for this user", ErrorCode.NEX_NOT_FOUND);
         }
 
         member.setStatus(NexMember.MemberStatus.ACTIVE);
@@ -106,10 +115,11 @@ public class NexMemberServiceImpl implements NexMemberService {
         log.info("Declining invitation for user: {} to nex: {}", userId, nexId);
 
         NexMember member = nexMemberRepository.findByNexIdAndUserId(nexId, userId)
-                .orElseThrow(() -> new BusinessException("Invitation not found", ErrorCode.NEX_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException("No pending invitation found for this user",
+                        ErrorCode.NEX_NOT_FOUND));
 
         if (member.getStatus() != NexMember.MemberStatus.PENDING) {
-            throw new BusinessException("No pending invitation found", ErrorCode.NEX_NOT_FOUND);
+            throw new BusinessException("No pending invitation found for this user", ErrorCode.NEX_NOT_FOUND);
         }
 
         nexMemberRepository.delete(member);
@@ -129,7 +139,8 @@ public class NexMemberServiceImpl implements NexMemberService {
         }
 
         NexMember member = nexMemberRepository.findByNexIdAndUserId(nexId, memberId)
-                .orElseThrow(() -> new BusinessException("Member not found", ErrorCode.NEX_NOT_MEMBER));
+                .orElseThrow(() -> new BusinessException("Member not found in this expense group",
+                        ErrorCode.NEX_NOT_MEMBER));
 
         member.setRole(request.getRole());
         nexMemberRepository.save(member);
@@ -157,7 +168,8 @@ public class NexMemberServiceImpl implements NexMemberService {
         }
 
         NexMember member = nexMemberRepository.findByNexIdAndUserId(nexId, memberId)
-                .orElseThrow(() -> new BusinessException("Member not found", ErrorCode.NEX_NOT_MEMBER));
+                .orElseThrow(() -> new BusinessException("Member not found in this expense group",
+                        ErrorCode.NEX_NOT_MEMBER));
 
         nexMemberRepository.delete(member);
 
@@ -170,7 +182,8 @@ public class NexMemberServiceImpl implements NexMemberService {
         log.info("User: {} leaving nex: {}", userId, nexId);
 
         NexMember member = nexMemberRepository.findByNexIdAndUserId(nexId, userId)
-                .orElseThrow(() -> new BusinessException("Member not found", ErrorCode.NEX_NOT_MEMBER));
+                .orElseThrow(() -> new BusinessException("Member not found in this expense group",
+                        ErrorCode.NEX_NOT_MEMBER));
 
         // If user is admin and only admin, prevent leaving
         if (member.getRole() == NexMember.MemberRole.ADMIN) {
@@ -189,40 +202,82 @@ public class NexMemberServiceImpl implements NexMemberService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<NexMemberDto> getNexMembers(String nexId, String userId) {
-        log.info("Getting members for nex: {} by user: {}", nexId, userId);
+    public PaginatedResponse<NexMemberDto> getNexMembers(String nexId, String userId, int page, int size) {
+        log.info("Getting paginated members for nex: {} by user: {}, page: {}, size: {}", nexId, userId, page, size);
 
         // Check if user is member
         if (!isMember(nexId, userId)) {
             throw new BusinessException("Access denied", ErrorCode.AUTHZ_NEX_ACCESS_DENIED);
         }
 
-        List<NexMember> members = nexMemberRepository.findAllMembersByNexId(nexId);
-        return members.stream()
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "createdAt"));
+        Page<NexMember> memberPage = nexMemberRepository.findAllMembersByNexIdPaginated(nexId, pageable);
+
+        List<NexMemberDto> memberDtos = memberPage.getContent().stream()
                 .map(nexMemberMapper::toDto)
                 .collect(Collectors.toList());
+
+        return PaginatedResponse.<NexMemberDto>builder()
+                .data(memberDtos)
+                .pagination(PaginatedResponse.PaginationInfo.builder()
+                        .page(page)
+                        .size(size)
+                        .totalElements(memberPage.getTotalElements())
+                        .totalPages(memberPage.getTotalPages())
+                        .hasNext(memberPage.hasNext())
+                        .hasPrevious(memberPage.hasPrevious())
+                        .build())
+                .build();
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<InvitationDto> getPendingInvitations(String userId) {
-        log.info("Getting pending invitations for user: {}", userId);
+    public PaginatedResponse<InvitationDto> getPendingInvitations(String userId, int page, int size) {
+        log.info("Getting paginated pending invitations for user: {}, page: {}, size: {}", userId, page, size);
 
-        List<NexMember> pendingInvitations = nexMemberRepository.findPendingInvitationsByUserId(userId);
-        return pendingInvitations.stream()
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<NexMember> invitationPage = nexMemberRepository.findPendingInvitationsByUserIdPaginated(userId, pageable);
+
+        List<InvitationDto> invitationDtos = invitationPage.getContent().stream()
                 .map(invitationMapper::toInvitationDto)
                 .collect(Collectors.toList());
+
+        return PaginatedResponse.<InvitationDto>builder()
+                .data(invitationDtos)
+                .pagination(PaginatedResponse.PaginationInfo.builder()
+                        .page(page)
+                        .size(size)
+                        .totalElements(invitationPage.getTotalElements())
+                        .totalPages(invitationPage.getTotalPages())
+                        .hasNext(invitationPage.hasNext())
+                        .hasPrevious(invitationPage.hasPrevious())
+                        .build())
+                .build();
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<NexMemberDto> getUserMemberships(String userId) {
-        log.info("Getting memberships for user: {}", userId);
+    public PaginatedResponse<NexMemberDto> getUserMemberships(String userId, int page, int size) {
+        log.info("Getting paginated memberships for user: {}, page: {}, size: {}", userId, page, size);
 
-        List<NexMember> memberships = nexMemberRepository.findActiveMembershipsByUserId(userId);
-        return memberships.stream()
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<NexMember> membershipPage = nexMemberRepository.findActiveMembershipsByUserIdPaginated(userId, pageable);
+
+        List<NexMemberDto> membershipDtos = membershipPage.getContent().stream()
                 .map(nexMemberMapper::toDto)
                 .collect(Collectors.toList());
+
+        return PaginatedResponse.<NexMemberDto>builder()
+                .data(membershipDtos)
+                .pagination(PaginatedResponse.PaginationInfo.builder()
+                        .page(page)
+                        .size(size)
+                        .totalElements(membershipPage.getTotalElements())
+                        .totalPages(membershipPage.getTotalPages())
+                        .hasNext(membershipPage.hasNext())
+                        .hasPrevious(membershipPage.hasPrevious())
+                        .build())
+                .build();
     }
 
     private boolean isMember(String nexId, String userId) {

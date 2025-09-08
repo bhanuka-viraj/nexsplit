@@ -10,7 +10,9 @@ import com.nexsplit.dto.user.UpdateUserDto;
 import com.nexsplit.dto.user.UserProfileDto;
 import com.nexsplit.dto.ApiResponse;
 import com.nexsplit.service.AuditService;
+import com.nexsplit.service.UserService;
 import com.nexsplit.service.impl.UserServiceImpl;
+import com.nexsplit.util.JwtUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -34,12 +36,14 @@ import java.util.Map;
 @Slf4j
 public class UserController {
 
-    private final UserServiceImpl userServiceImpl;
+    private final UserService userServiceImpl;
     private final AuditService auditService;
+    private final JwtUtil jwtUtil;
 
-    public UserController(UserServiceImpl userServiceImpl, AuditService auditService) {
+    public UserController(UserService userServiceImpl, AuditService auditService, JwtUtil jwtUtil) {
         this.userServiceImpl = userServiceImpl;
         this.auditService = auditService;
+        this.jwtUtil = jwtUtil;
     }
 
     @GetMapping("/profile")
@@ -54,9 +58,12 @@ public class UserController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        String email = userDetails.getUsername();
+        String email = jwtUtil.getEmailFromCurrentToken();
+        if (email == null) {
+            log.error("Failed to extract email from JWT token");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
 
-        // Log business event for Elasticsearch
         StructuredLoggingUtil.logBusinessEvent(
                 "PROFILE_VIEW",
                 email,
@@ -83,9 +90,12 @@ public class UserController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
 
-        String email = userDetails.getUsername();
+        String email = jwtUtil.getEmailFromCurrentToken();
+        if (email == null) {
+            log.error("Failed to extract email from JWT token");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
 
-        // Log business event for Elasticsearch
         StructuredLoggingUtil.logBusinessEvent(
                 "PROFILE_UPDATE",
                 email,
@@ -100,7 +110,7 @@ public class UserController {
 
         // Log user action asynchronously
         auditService.logUserActionAsync(
-                userDetails.getUsername(),
+                email,
                 "PROFILE_UPDATE",
                 "User profile updated successfully");
 
@@ -111,7 +121,11 @@ public class UserController {
     public ResponseEntity<Map<String, Object>> changePassword(
             @AuthenticationPrincipal UserDetails userDetails,
             @Valid @RequestBody ChangePasswordDto changePasswordDto) {
-        String email = userDetails.getUsername();
+        String email = jwtUtil.getEmailFromCurrentToken();
+        if (email == null) {
+            log.error("Failed to extract email from JWT token");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
 
         if (!changePasswordDto.getNewPassword().equals(changePasswordDto.getConfirmPassword())) {
             return ResponseEntity.badRequest()
@@ -124,7 +138,6 @@ public class UserController {
 
         log.info("Password changed successfully for user: {}", LoggingUtil.maskEmail(email));
 
-        // Log user action asynchronously
         auditService.logUserActionAsync(
                 email,
                 "PASSWORD_CHANGE",
@@ -166,7 +179,12 @@ public class UserController {
 
     @DeleteMapping("/deactivate")
     public ResponseEntity<Map<String, Object>> deactivateUser(@AuthenticationPrincipal UserDetails userDetails) {
-        String email = userDetails.getUsername();
+        String email = jwtUtil.getEmailFromCurrentToken();
+        if (email == null) {
+            log.error("Failed to extract email from JWT token");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
         userServiceImpl.deactivateUser(email);
 
         log.info("User deactivated: {}", LoggingUtil.maskEmail(email));

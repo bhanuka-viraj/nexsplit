@@ -4,8 +4,7 @@ import com.nexsplit.dto.nex.InviteMemberRequest;
 import com.nexsplit.dto.nex.InvitationDto;
 import com.nexsplit.dto.nex.NexMemberDto;
 import com.nexsplit.dto.nex.UpdateMemberRoleRequest;
-
-import java.util.List;
+import com.nexsplit.dto.PaginatedResponse;
 
 public interface NexMemberService {
 
@@ -40,17 +39,17 @@ public interface NexMemberService {
     void leaveNex(String nexId, String userId);
 
     /**
-     * Get all members of a nex group
+     * Get paginated members of a nex group
      */
-    List<NexMemberDto> getNexMembers(String nexId, String userId);
+    PaginatedResponse<NexMemberDto> getNexMembers(String nexId, String userId, int page, int size);
 
     /**
-     * Get pending invitations for a user
+     * Get paginated pending invitations for a user
      */
-    List<InvitationDto> getPendingInvitations(String userId);
+    PaginatedResponse<InvitationDto> getPendingInvitations(String userId, int page, int size);
 
     /**
-     * Get user's active memberships
+     * Get paginated user's active memberships
      */
-    List<NexMemberDto> getUserMemberships(String userId);
+    PaginatedResponse<NexMemberDto> getUserMemberships(String userId, int page, int size);
 }

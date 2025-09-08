@@ -137,7 +137,10 @@ services:
     image: bhanukaviraj/nexsplit:latest
     container_name: nexsplit-app
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/nexsplit
+      # Database Configuration - External PostgreSQL
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: nexsplit
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-Viraj@2002}
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-key-for-local-development-only}
@@ -150,14 +153,19 @@ services:
       MAIL_PORT: ${MAIL_PORT:-587}
       MAIL_USERNAME: ${MAIL_USERNAME:-nexsplit.mail@gmail.com}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-mplpwfxipmngldqz}
+      # CORS Configuration
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080,http://127.0.0.1:8080,http://localhost:8081,http://127.0.0.1:8081,http://localhost:8082,http://127.0.0.1:8082}
+      CORS_ALLOW_CREDENTIALS: ${CORS_ALLOW_CREDENTIALS:-true}
+      CORS_ALLOWED_METHODS: ${CORS_ALLOWED_METHODS:-GET,POST,PUT,PATCH,DELETE,OPTIONS}
+      CORS_ALLOWED_HEADERS: ${CORS_ALLOWED_HEADERS:-Authorization,Origin,Content-Type,Accept,Accept-Encoding,Accept-Language,Access-Control-Allow-Origin,Access-Control-Allow-Headers,Access-Control-Request-Method,X-Requested-With,X-Auth-Token,X-Xsrf-Token,Cache-Control,Id-Token,X-Correlation-ID}
       SPRING_PROFILES_ACTIVE: docker
     ports:
       - "8080:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      elasticsearch:
-        condition: service_healthy
+    # depends_on:
+    #   postgres:
+    #     condition: service_healthy
+    #   elasticsearch:
+    #     condition: service_healthy
     networks:
       - nexsplit-network
     # Logs are stored inside the container

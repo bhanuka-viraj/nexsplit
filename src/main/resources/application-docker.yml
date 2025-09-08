@@ -7,7 +7,7 @@
 spring:
   datasource:
     # Database connection for Docker environment
-    url: jdbc:postgresql://postgres:5432/nexsplit
+    url: jdbc:postgresql://${DB_HOST:95.111.248.142}:${DB_PORT:5432}/${DB_NAME:nexsplit}
     username: postgres
     password: ${DB_PASSWORD:Viraj@2002}
   jpa:
@@ -115,37 +115,12 @@ logging:
 cors:
   # Allow credentials (cookies, authorization headers)
   allow-credentials: true
-  # Allowed origins for CORS
-  allowed-origins:
-    - http://localhost:3000
-    - http://127.0.0.1:3000
-    - http://localhost:8080
-    - http://127.0.0.1:8080
+  # Allowed origins for CORS (comma-separated for @Value injection)
+  allowed-origins: http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080,http://127.0.0.1:8080,http://localhost:8081,http://127.0.0.1:8081,http://localhost:8082,http://127.0.0.1:8082
   # Allowed HTTP methods
-  allowed-methods:
-    - GET
-    - POST
-    - PUT
-    - PATCH
-    - DELETE
-    - OPTIONS
+  allowed-methods: GET,POST,PUT,PATCH,DELETE,OPTIONS
   # Allowed headers
-  allowed-headers:
-    - Authorization
-    - Origin
-    - Content-Type
-    - Accept
-    - Accept-Encoding
-    - Accept-Language
-    - Access-Control-Allow-Origin
-    - Access-Control-Allow-Headers
-    - Access-Control-Request-Method
-    - X-Requested-With
-    - X-Auth-Token
-    - X-Xsrf-Token
-    - Cache-Control
-    - Id-Token
-    - X-Correlation-ID
+  allowed-headers: Authorization,Origin,Content-Type,Accept,Accept-Encoding,Accept-Language,Access-Control-Allow-Origin,Access-Control-Allow-Headers,Access-Control-Request-Method,X-Requested-With,X-Auth-Token,X-Xsrf-Token,Cache-Control,Id-Token,X-Correlation-ID
 
 # ========================================
 # SWAGGER/OPENAPI CONFIGURATION

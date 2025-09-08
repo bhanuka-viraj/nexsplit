@@ -39,6 +39,18 @@ public class LoggingAspect {
      * Log controller method exit with sanitized results
      * Avoids logging sensitive response data
      */
+    //                          aspectJ pointcut expression language, to point where the advice is applied
+
+    /*
+     execution: This is the pointcut designator, indicating that the advice applies to method executions
+     * : The first asterisk means any return type. The advice will apply to methods regardless of what they return (e.g., void, String, Object, etc.).
+     com.nexsplit.controller: Specifies the package where the target methods reside (com.nexsplit.controller).
+     .. : The double dot means any sub-package under com.nexsplit.controller. For example, it includes methods in com.nexsplit.controller, com.nexsplit.controller.auth
+     * : The second asterisk means any class in the specified package or its sub-packages.
+     *(..): The final part means any method in those classes, with any parameters (.. indicates zero or more parameters).
+
+     */
+
     @AfterReturning(pointcut = "execution(* com.nexsplit.controller..*(..))", returning = "result")
     public void logControllerExit(JoinPoint joinPoint, Object result) {
         String methodName = joinPoint.getSignature().toShortString();

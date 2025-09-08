@@ -313,6 +313,210 @@ DELETE /api/v1/categories/{categoryId}          - Delete category
 GET    /api/v1/nex/{nexId}/categories           - List categories for specific nex
 ```
 
+### **🏷️ Category Management System**
+
+#### **Category Types & Architecture**
+
+The system supports **3 types of categories** with different access patterns:
+
+| Category Type           | `is_default` | `nex_id` | `created_by` | Access Level          |
+| ----------------------- | ------------ | -------- | ------------ | --------------------- |
+| **Default Categories**  | `true`       | `NULL`   | System UUID  | All users (read-only) |
+| **Personal Categories** | `false`      | `NULL`   | User UUID    | Creator only          |
+| **Nex Categories**      | `false`      | Nex UUID | User UUID    | Nex members           |
+
+#### **Default Categories (`is_default = true`)**
+
+**Purpose:**
+
+- 🌍 **Global availability** - Available to ALL users in the system
+- 🛡️ **Read-only access** - Users cannot modify or delete them
+- 🏗️ **System-managed** - Created by the system, not individual users
+- 📊 **Consistent naming** - Same categories available across all users
+
+**Benefits:**
+
+- ✅ **Immediate availability** - New users get 42 pre-created categories instantly
+- ✅ **No setup required** - No need to create basic categories like "Food", "Transportation"
+- ✅ **Standardization** - Consistent category names across all users
+- ✅ **User experience** - Good starting point for expense organization
+
+**Default Categories Available (42 total):**
+
+**Food & Dining (4):** Food & Dining, Restaurants, Groceries, Coffee & Drinks
+**Transportation (5):** Transportation, Fuel, Public Transport, Parking, Ride Sharing
+**Entertainment (4):** Entertainment, Movies & Shows, Sports & Recreation, Gaming
+**Shopping (4):** Shopping, Clothing, Electronics, Home & Garden
+**Bills & Utilities (5):** Bills & Utilities, Electricity, Water, Internet & Phone, Rent
+**Health & Medical (4):** Health & Medical, Doctor Visits, Medications, Fitness & Wellness
+**Education (4):** Education, Tuition, Books & Supplies, Online Courses
+**Travel (4):** Travel, Flights, Hotels, Vacation Activities
+**Business (4):** Business, Office Supplies, Business Meals, Professional Development
+**Miscellaneous (4):** Miscellaneous, Gifts, Charity & Donations, Pet Expenses
+
+#### **Personal Categories (`is_default = false`, `nex_id = NULL`)**
+
+**Purpose:**
+
+- 👤 **User-specific** - Created by individual users for their personal use
+- 🔒 **Private access** - Only visible to the creator
+- ✏️ **Full CRUD** - Creator can create, read, update, delete
+- 🎯 **Customization** - Users can create categories that match their specific needs
+
+**Use Cases:**
+
+- Personal expense tracking outside of group activities
+- Custom categories for specific spending patterns
+- Categories that don't fit standard default categories
+
+#### **Nex Categories (`is_default = false`, `nex_id = NOT NULL`)**
+
+**Purpose:**
+
+- 👥 **Group-specific** - Shared within a specific expense group (nex)
+- 🔐 **Member access** - All nex members can view and use
+- ✏️ **Creator control** - Only the creator can modify/delete
+- 🎯 **Group customization** - Categories specific to group activities
+
+**Use Cases:**
+
+- Group-specific expense categories (e.g., "Team Lunch", "Project Supplies")
+- Categories relevant to the group's activities
+- Shared categories for collaborative expense tracking
+
+#### **Authorization & Security Matrix**
+
+| Operation  | Default Categories | Personal Categories | Nex Categories  |
+| ---------- | ------------------ | ------------------- | --------------- |
+| **Read**   | ✅ All users       | ✅ Creator only     | ✅ Nex members  |
+| **Create** | ❌ System only     | ✅ Creator          | ✅ Nex members  |
+| **Update** | ❌ System only     | ✅ Creator only     | ✅ Creator only |
+| **Delete** | ❌ System only     | ✅ Creator only     | ✅ Creator only |
+
+#### **API Endpoints Details**
+
+**Create Categories:**
+
+```http
+POST /api/v1/categories
+Content-Type: application/json
+Authorization: Bearer <token>
+
+# Personal Category
+{
+  "name": "My Personal Category"
+}
+
+# Nex Category
+{
+  "name": "Group Category",
+  "nexId": "nex-uuid-here"
+}
+```
+
+**List Categories:**
+
+```http
+# All user categories (personal + default)
+GET /api/v1/categories
+
+# Personal categories only
+GET /api/v1/categories/personal
+
+# Default categories only
+GET /api/v1/categories/default
+
+# Nex-specific categories
+GET /api/v1/nex/{nexId}/categories
+
+# Paginated categories
+GET /api/v1/categories/paginated?page=0&size=10
+```
+
+**Category Management:**
+
+```http
+# Get category details
+GET /api/v1/categories/{categoryId}
+
+# Update category (creator only)
+PUT /api/v1/categories/{categoryId}
+{
+  "name": "Updated Category Name"
+}
+
+# Delete category (creator only, no expenses)
+DELETE /api/v1/categories/{categoryId}
+```
+
+#### **Business Rules & Validation**
+
+**Category Creation:**
+
+- ✅ **Name uniqueness** - Within user's personal categories or within a nex
+- ✅ **Required fields** - Name is mandatory
+- ✅ **Length validation** - Name must be 1-255 characters
+- ✅ **Authorization** - User must be nex member for group categories
+
+**Category Updates:**
+
+- ✅ **Creator only** - Only the creator can modify categories
+- ✅ **Name uniqueness** - Check for conflicts when changing names
+- ✅ **Default protection** - Default categories cannot be modified
+
+**Category Deletion:**
+
+- ✅ **Creator only** - Only the creator can delete categories
+- ✅ **Expense check** - Cannot delete if category has existing expenses
+- ✅ **Default protection** - Default categories cannot be deleted
+- ✅ **Soft delete** - Categories are soft deleted (marked as deleted, not physically removed)
+
+#### **Database Schema Details**
+
+```sql
+CREATE TABLE categories (
+    id CHAR(36) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    created_by CHAR(36) NOT NULL,
+    nex_id CHAR(36),
+    is_default BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL,
+    modified_at TIMESTAMP NOT NULL,
+
+    CONSTRAINT fk_categories_created_by FOREIGN KEY (created_by) REFERENCES users(id),
+    CONSTRAINT fk_categories_nex FOREIGN KEY (nex_id) REFERENCES nex(id)
+);
+```
+
+**Key Fields:**
+
+- `is_default` - Distinguishes system-generated vs user-generated categories
+- `nex_id` - Links category to specific expense group (NULL for personal/default)
+- `created_by` - Tracks who created the category for authorization
+
+#### **Implementation Benefits**
+
+**For Users:**
+
+- 🚀 **Quick start** - 42 default categories available immediately
+- 🎯 **Flexibility** - Create custom categories as needed
+- 🔒 **Privacy** - Personal categories remain private
+- 👥 **Collaboration** - Share categories within groups
+
+**For System:**
+
+- 📊 **Analytics** - Track category usage patterns
+- 🔄 **Updates** - Add new default categories in future migrations
+- 🛡️ **Security** - Proper authorization and access control
+- 📈 **Scalability** - Efficient queries with proper indexing
+
+**For Development:**
+
+- 🧪 **Testing** - Comprehensive unit tests for all operations
+- 📚 **Documentation** - OpenAPI documentation for all endpoints
+- 🔍 **Monitoring** - Structured logging for business events
+- 🚀 **Performance** - Optimized queries with proper database design
+
 ### **💰 Expenses Endpoints**
 
 ```

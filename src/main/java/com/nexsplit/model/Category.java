@@ -20,8 +20,7 @@ import java.util.List;
 public class Category extends BaseEntity {
 
     @Id
-    @GeneratedValue(generator = "uuid2")
-    @GenericGenerator(name = "uuid2", strategy = "uuid2")
+    @GeneratedValue(strategy = GenerationType.UUID)
     @Column(columnDefinition = "CHAR(36)")
     private String id;
 
@@ -38,11 +37,11 @@ public class Category extends BaseEntity {
     private Boolean isDefault;
 
     // Relationships
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "created_by", insertable = false, updatable = false)
     private User creator;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "nex_id", insertable = false, updatable = false)
     private Nex nex;
 

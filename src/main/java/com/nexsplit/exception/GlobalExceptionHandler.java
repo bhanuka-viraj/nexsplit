@@ -65,6 +65,23 @@ public class GlobalExceptionHandler {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
         }
 
+        @ExceptionHandler(EntityNotFoundException.class)
+        public ResponseEntity<ApiResponse<Void>> handleEntityNotFoundException(EntityNotFoundException ex) {
+                StructuredLoggingUtil.logErrorEvent(
+                                "ENTITY_NOT_FOUND",
+                                ex.getMessage(),
+                                ex.getStackTrace()[0].toString(),
+                                Map.of(
+                                                "exception", ex.getClass().getSimpleName(),
+                                                "entityType", ex.getEntityType().getSimpleName(),
+                                                "entityId", ex.getEntityId()));
+
+                ApiResponse<Void> response = ApiResponse.<Void>error(ex.getMessage(), ex.getErrorCode());
+                response.setCorrelationId(CorrelationIdFilter.getCurrentCorrelationId());
+
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+        }
+
         @ExceptionHandler(UserUnauthorizedException.class)
         public ResponseEntity<ApiResponse<Void>> handleUserUnauthorizedException(UserUnauthorizedException ex) {
                 StructuredLoggingUtil.logSecurityEvent(

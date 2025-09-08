@@ -78,9 +78,9 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
 
-        config.setAllowedOrigins(List.of(apiConfig.getAllowedOrigins()));
-        config.setAllowedMethods(List.of(apiConfig.getAllowedMethods()));
-        config.setAllowedHeaders(List.of(apiConfig.getAllowedHeaders()));
+        config.setAllowedOrigins(apiConfig.getAllowedOrigins());
+        config.setAllowedMethods(apiConfig.getAllowedMethods());
+        config.setAllowedHeaders(apiConfig.getAllowedHeaders());
         config.setAllowCredentials(apiConfig.isAllowedCredentials());
         config.setMaxAge(3600L);
 

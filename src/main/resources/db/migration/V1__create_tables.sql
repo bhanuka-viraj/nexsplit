@@ -62,7 +62,6 @@ CREATE TABLE refresh_tokens (
     is_revoked BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL,
     used_at TIMESTAMP,
-    ip_address VARCHAR(45), -- IPv6 compatible
     user_agent TEXT,
     
     -- Foreign key constraint
