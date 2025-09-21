@@ -14,7 +14,6 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-import com.nexsplit.util.LoggingUtil;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -61,6 +60,10 @@ public class JwtFilter extends OncePerRequestFilter {
             if (SecurityContextHolder.getContext().getAuthentication() == null) {
                 String userId = jwtUtil.getUserIdFromToken(token);
                 String role = jwtUtil.getRoleFromToken(token);
+                String email = jwtUtil.getEmailFromToken(token);
+
+                log.info("JWT Token parsed - UserId: {}, Email: {}, Role: {}, Token: {}...",
+                        userId, email, role, token.substring(0, Math.min(20, token.length())));
 
                 // Load UserDetails from the database
                 UserDetails userDetails = userDetailsService.loadUserByUsername(userId);
@@ -70,6 +73,8 @@ public class JwtFilter extends OncePerRequestFilter {
                 auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(auth);
                 log.info("Authenticated user with ID: {} and role: {}", userId, role);
+            } else {
+                log.debug("User already authenticated, skipping token processing");
             }
         } else {
             log.warn("Invalid or expired JWT token");

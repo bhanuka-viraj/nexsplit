@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Audit service implementation with async operations
@@ -23,6 +24,24 @@ import java.util.UUID;
 public class AuditServiceImpl implements AuditService {
 
     private final AuditEventRepository auditEventRepository;
+
+    /**
+     * Generate a thread-safe unique ID for audit events
+     * Uses timestamp + random component to prevent collisions
+     */
+    private String generateUniqueId() {
+        long timestamp = System.currentTimeMillis();
+        int random = ThreadLocalRandom.current().nextInt(10000, 99999);
+        return timestamp + "-" + random + "-" + UUID.randomUUID().toString().substring(0, 8);
+    }
+
+    /**
+     * Save audit event with direct persistence
+     * Uses repository save() for async compatibility
+     */
+    private void saveAuditEvent(AuditEvent auditEvent) {
+        auditEventRepository.save(auditEvent);
+    }
 
     /**
      * Log security event asynchronously
@@ -39,9 +58,9 @@ public class AuditServiceImpl implements AuditService {
         try {
             log.debug("Logging security event for user: {}, type: {}", userId, eventType);
 
-            // Create audit event entity
+            // Create audit event entity with thread-safe ID generation
             AuditEvent auditEvent = AuditEvent.builder()
-                    .id(UUID.randomUUID().toString())
+                    .id(generateUniqueId())
                     .userId(userId)
                     .eventType(eventType)
                     .eventCategory("SECURITY")
@@ -50,8 +69,8 @@ public class AuditServiceImpl implements AuditService {
                     .timestamp(LocalDateTime.now())
                     .build();
 
-            // Save to database
-            auditEventRepository.save(auditEvent);
+            // Save to database with direct persistence
+            saveAuditEvent(auditEvent);
 
             // Also log to structured logging for monitoring
             StructuredLoggingUtil.logBusinessEvent(
@@ -94,9 +113,9 @@ public class AuditServiceImpl implements AuditService {
         try {
             log.debug("Logging user action for user: {}, action: {}", userId, action);
 
-            // Create audit event entity
+            // Create audit event entity with thread-safe ID generation
             AuditEvent auditEvent = AuditEvent.builder()
-                    .id(UUID.randomUUID().toString())
+                    .id(generateUniqueId())
                     .userId(userId)
                     .eventType(action)
                     .eventCategory("USER_ACTION")
@@ -105,8 +124,8 @@ public class AuditServiceImpl implements AuditService {
                     .timestamp(LocalDateTime.now())
                     .build();
 
-            // Save to database
-            auditEventRepository.save(auditEvent);
+            // Save to database with direct persistence
+            saveAuditEvent(auditEvent);
 
             // Also log to structured logging for monitoring
             StructuredLoggingUtil.logBusinessEvent(
@@ -149,9 +168,9 @@ public class AuditServiceImpl implements AuditService {
         try {
             log.debug("Logging system event: {}", eventType);
 
-            // Create audit event entity
+            // Create audit event entity with thread-safe ID generation
             AuditEvent auditEvent = AuditEvent.builder()
-                    .id(UUID.randomUUID().toString())
+                    .id(generateUniqueId())
                     .userId(null) // System events don't have a specific user (NULL is allowed by FK constraint)
                     .eventType(eventType)
                     .eventCategory("SYSTEM")
@@ -160,8 +179,8 @@ public class AuditServiceImpl implements AuditService {
                     .timestamp(LocalDateTime.now())
                     .build();
 
-            // Save to database
-            auditEventRepository.save(auditEvent);
+            // Save to database with direct persistence
+            saveAuditEvent(auditEvent);
 
             // Also log to structured logging for monitoring
             StructuredLoggingUtil.logBusinessEvent(
@@ -205,9 +224,9 @@ public class AuditServiceImpl implements AuditService {
         try {
             log.debug("Logging authentication event for user: {}, type: {}", userId, eventType);
 
-            // Create audit event entity
+            // Create audit event entity with thread-safe ID generation
             AuditEvent auditEvent = AuditEvent.builder()
-                    .id(UUID.randomUUID().toString())
+                    .id(generateUniqueId())
                     .userId(userId)
                     .eventType(eventType)
                     .eventCategory("AUTHENTICATION")
@@ -218,8 +237,8 @@ public class AuditServiceImpl implements AuditService {
                     .timestamp(LocalDateTime.now())
                     .build();
 
-            // Save to database
-            auditEventRepository.save(auditEvent);
+            // Save to database with direct persistence
+            saveAuditEvent(auditEvent);
 
             // Also log to structured logging for monitoring
             StructuredLoggingUtil.logBusinessEvent(

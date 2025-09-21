@@ -2,21 +2,36 @@ package com.nexsplit.model;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.GenericGenerator;
+import lombok.experimental.SuperBuilder;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
+/**
+ * Bill entity representing recurring or one-time bills.
+ * 
+ * This entity stores information about bills including title, amount, currency,
+ * due dates, frequency, and payment status. Bills can be recurring or one-time
+ * and are associated with nex groups and created by users.
+ * 
+ * Database table: bills
+ * 
+ * @author NexSplit Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Entity
 @Table(name = "bills")
 @Data
-@Builder
+@SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-public class Bill {
+@EqualsAndHashCode(callSuper = true)
+public class Bill extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -57,12 +72,6 @@ public class Bill {
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
-    @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt;
-
-    @Column(name = "modified_at", nullable = false)
-    private LocalDateTime modifiedAt;
-
     // Relationships
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "nex_id", insertable = false, updatable = false)
@@ -72,16 +81,21 @@ public class Bill {
     @JoinColumn(name = "created_by", insertable = false, updatable = false)
     private User creator;
 
+    @OneToMany(mappedBy = "bill", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<BillParticipant> participants;
+
     public enum Frequency {
         ONCE, DAILY, WEEKLY, MONTHLY, YEARLY
     }
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        modifiedAt = LocalDateTime.now();
+        // Ensure BaseEntity default values are set
+        ensureDefaultValues();
+
+        // Set Bill-specific default values
         if (currency == null) {
-            currency = "USD";
+            currency = "USD"; // TODO: Use CurrencyUtil.getDefaultCurrency() when Spring context is available
         }
         if (isRecurring == null) {
             isRecurring = false;
@@ -89,10 +103,5 @@ public class Bill {
         if (isPaid == null) {
             isPaid = false;
         }
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        modifiedAt = LocalDateTime.now();
     }
 }

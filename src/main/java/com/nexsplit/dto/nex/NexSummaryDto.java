@@ -15,12 +15,5 @@ public class NexSummaryDto {
 
     private String nexId;
     private String nexName;
-    private Integer totalMembers;
-    private Integer totalExpenses;
-    private Integer totalCategories;
-    private BigDecimal totalExpenseAmount;
-    private BigDecimal totalDebtAmount;
-    private BigDecimal totalSettledAmount;
-    private Integer pendingSettlements;
-    private Integer completedSettlements;
+    private String creatorName;
 }

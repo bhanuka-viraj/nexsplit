@@ -6,7 +6,6 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 
 @Data
 @Builder
@@ -81,19 +80,4 @@ public class ApiResponse<T> {
                 .build();
     }
 
-    // Legacy methods for backward compatibility
-    public static Map<String, Object> errorResponse(String message, int status) {
-        return Map.of(
-                "error", true,
-                "message", message,
-                "status", status,
-                "timestamp", LocalDateTime.now());
-    }
-
-    public static Map<String, Object> successResponse(Object data) {
-        return Map.of(
-                "error", false,
-                "data", data,
-                "timestamp", LocalDateTime.now());
-    }
 }

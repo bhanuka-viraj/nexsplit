@@ -2,6 +2,14 @@
 -- This migration adds the necessary columns for soft delete functionality
 
 -- ========================================
+-- USERS TABLE (Missing from original migration)
+-- ========================================
+-- Add missing soft delete columns to users table to match BaseEntity
+ALTER TABLE users 
+ADD COLUMN deleted_by VARCHAR(36) NULL,
+ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- ========================================
 -- NEX AND MEMBERS (Already implemented in code)
 -- ========================================
 -- Add soft delete fields to nex table
@@ -73,9 +81,14 @@ ADD COLUMN deleted_at TIMESTAMP NULL,
 ADD COLUMN deleted_by VARCHAR(36) NULL,
 ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT FALSE;
 
+
 -- ========================================
 -- INDEXES FOR PERFORMANCE
 -- ========================================
+-- Users indexes
+CREATE INDEX idx_users_is_deleted ON users(is_deleted);
+CREATE INDEX idx_users_deleted_at ON users(deleted_at);
+
 -- Nex and members indexes
 CREATE INDEX idx_nex_is_deleted ON nex(is_deleted);
 CREATE INDEX idx_nex_members_is_deleted ON nex_members(is_deleted);
@@ -113,5 +126,6 @@ CREATE INDEX idx_bill_participants_deleted_at ON bill_participants(deleted_at);
 -- Notifications indexes
 CREATE INDEX idx_notifications_is_deleted ON notifications(is_deleted);
 CREATE INDEX idx_notifications_deleted_at ON notifications(deleted_at);
+
 
 -- Note: We keep is_archived for nex table as it will be used for archive functionality later

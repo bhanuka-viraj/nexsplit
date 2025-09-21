@@ -38,6 +38,8 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
+    // Note: passwordEncoder is kept for future use in token validation
+    @SuppressWarnings("unused")
     private final BCryptPasswordEncoder passwordEncoder;
     private final AuditService auditService;
 
@@ -223,6 +225,7 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
                 .userAgent(userAgent)
                 .build();
 
+        // Use save() for simpler persistence
         refreshTokenRepository.save(refreshToken);
         return jwtToken;
     }
@@ -255,6 +258,8 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
      */
     private boolean isFamilyCompromised(RefreshToken currentToken) {
         String familyId = currentToken.getFamilyId();
+        // Note: userId is available for future logging/audit purposes
+        @SuppressWarnings("unused")
         String userId = currentToken.getUserId();
 
         // OPTIMIZED: Use database-level aggregation for multi-source detection
@@ -283,7 +288,11 @@ public class RefreshTokenServiceImpl implements RefreshTokenService {
      */
     private boolean exceedsConcurrentSessions(String userId) {
         long activeSessions = refreshTokenRepository.findValidTokensByUserId(userId, LocalDateTime.now()).size();
-        return activeSessions > maxConcurrentSessions;
+        boolean exceeds = activeSessions > maxConcurrentSessions;
+        if (exceeds) {
+            log.debug("User {} has {} active sessions (limit: {})", userId, activeSessions, maxConcurrentSessions);
+        }
+        return exceeds;
     }
 
     /**

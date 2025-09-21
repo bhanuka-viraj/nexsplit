@@ -87,6 +87,8 @@ logging:
 # ========================================
 app:
   base-url: ${APP_BASE_URL:http://localhost:8080}
+  default:
+    currency: ${APP_DEFAULT_CURRENCY:USD}
   pattern:
     # Kibana-friendly log pattern with correlation ID
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level [%X{correlationId}] %logger{36} - %msg%n"
@@ -144,6 +146,18 @@ springdoc:
             authBtn.style.color = 'white';
           }
         }, 1000);
+        
+        // Collapse all operation sections by default
+        setTimeout(function() {
+          // Find all operation sections and collapse them
+          const operationSections = document.querySelectorAll('.opblock');
+          operationSections.forEach(function(section) {
+            const toggle = section.querySelector('.opblock-summary');
+            if (toggle && !section.classList.contains('is-open')) {
+              toggle.click();
+            }
+          });
+        }, 500);
       };
   # Show all endpoints including those without @Operation annotation
   default-produces-media-type: application/json

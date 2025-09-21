@@ -1,11 +1,15 @@
 package com.nexsplit.service.impl;
 
 import com.nexsplit.dto.user.UpdateUserDto;
+import com.nexsplit.dto.user.UpdateUserRequest;
 import com.nexsplit.dto.user.UserDto;
 import com.nexsplit.dto.user.UserProfileDto;
+import com.nexsplit.dto.user.UserSearchDto;
+import com.nexsplit.dto.PaginatedResponse;
 import com.nexsplit.exception.UserNotFoundException;
-import com.nexsplit.exception.UserUnauthorizedException;
-import com.nexsplit.mapper.user.UserMapperRegistry;
+import com.nexsplit.exception.BusinessException;
+import com.nexsplit.dto.ErrorCode;
+import com.nexsplit.mapper.user.UserMapStruct;
 import com.nexsplit.model.User;
 import com.nexsplit.repository.UserRepository;
 import com.nexsplit.service.UserService;
@@ -17,14 +21,18 @@ import com.nexsplit.util.LoggingUtil;
 import com.nexsplit.util.PasswordUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import com.nexsplit.util.PaginationUtil;
 
 @Service
 @RequiredArgsConstructor
@@ -33,7 +41,7 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
     private final BCryptPasswordEncoder passwordEncoder;
-    private final UserMapperRegistry userMapperRegistry;
+    private final UserMapStruct userMapStruct;
 
     private final AuditService auditService;
     private final EmailService emailService;
@@ -93,25 +101,26 @@ public class UserServiceImpl implements UserService {
         // Validate input
         if (userRepository.existsActiveUserByEmail(userDto.getEmail())) {
             log.warn("Registration failed - email already exists: {}", LoggingUtil.maskEmail(userDto.getEmail()));
-            throw new IllegalArgumentException("Email already registered");
+            throw new BusinessException("Email already registered", ErrorCode.USER_EMAIL_EXISTS);
         }
         if (userRepository.existsActiveUserByUsername(userDto.getUsername())) {
             log.warn("Registration failed - username already taken: {}", userDto.getUsername());
-            throw new IllegalArgumentException("Username already taken");
+            throw new BusinessException("Username already taken", ErrorCode.USER_USERNAME_EXISTS);
         }
         if (userDto.getPassword() == null || userDto.getPassword().isEmpty()) {
             log.warn("Registration failed - password is null or empty for: {}",
                     LoggingUtil.maskEmail(userDto.getEmail()));
-            throw new IllegalArgumentException("Password cannot be null or empty");
+            throw new BusinessException("Password cannot be null or empty", ErrorCode.USER_PASSWORD_INVALID);
         }
         if (!PasswordUtil.isStrongPassword(userDto.getPassword())) {
             log.warn("Registration failed - weak password for: {}", LoggingUtil.maskEmail(userDto.getEmail()));
-            throw new IllegalArgumentException(
-                    "Password is not strong enough. " + PasswordUtil.getPasswordStrengthMessage(userDto.getPassword()));
+            throw new BusinessException(
+                    "Password is not strong enough. " + PasswordUtil.getPasswordStrengthMessage(userDto.getPassword()),
+                    ErrorCode.USER_PASSWORD_WEAK);
         }
 
         // Use mapper to create User entity from DTO
-        User user = userMapperRegistry.toEntity(userDto);
+        User user = userMapStruct.toEntity(userDto);
         user.setPassword(passwordEncoder.encode(userDto.getPassword()));
 
         // Set email as unverified initially
@@ -146,18 +155,19 @@ public class UserServiceImpl implements UserService {
         User user = userRepository.findActiveUserByEmail(email)
                 .orElseThrow(() -> {
                     log.warn("Login failed - user not found or inactive: {}", LoggingUtil.maskEmail(email));
-                    return new IllegalArgumentException("User not found or inactive");
+                    return new BusinessException("User not found or inactive", ErrorCode.USER_NOT_FOUND);
                 });
 
         if (!passwordEncoder.matches(password, user.getPassword())) {
             log.warn("Login failed - invalid credentials for: {}", LoggingUtil.maskEmail(email));
-            throw new IllegalArgumentException("Invalid credentials");
+            throw new BusinessException("Invalid credentials", ErrorCode.USER_INVALID_CREDENTIALS);
         }
 
         // Check if email is verified
         if (!user.getIsEmailValidate()) {
             log.warn("Login failed - email not verified for: {}", LoggingUtil.maskEmail(email));
-            throw new IllegalArgumentException("Email not verified. Please check your email and verify your account.");
+            throw new BusinessException("Email not verified. Please check your email and verify your account.",
+                    ErrorCode.USER_EMAIL_NOT_VERIFIED);
         }
 
         log.info("User login successful: {}", LoggingUtil.maskEmail(email));
@@ -169,7 +179,7 @@ public class UserServiceImpl implements UserService {
     }
 
     public UserDto getUserByEmail(String email) {
-        return userMapperRegistry.toDto(userRepository.getUserByEmail(email));
+        return userMapStruct.toDto(userRepository.getUserByEmail(email));
     }
 
     public User getUserByEmailForVerification(String email) {
@@ -180,7 +190,7 @@ public class UserServiceImpl implements UserService {
     public UserProfileDto getUserProfile(String email) {
         User user = userRepository.findActiveUserByEmail(email)
                 .orElseThrow(() -> new UserNotFoundException("User not found"));
-        return userMapperRegistry.toProfileDto(user);
+        return userMapStruct.toProfileDto(user);
     }
 
     @Transactional
@@ -191,14 +201,15 @@ public class UserServiceImpl implements UserService {
         // Check if username is being changed and if it's already taken
         if (!updateUserDto.getUsername().equals(user.getUsername())
                 && userRepository.existsActiveUserByUsername(updateUserDto.getUsername())) {
-            throw new IllegalArgumentException("Username already taken");
+            throw new BusinessException("Username already taken", ErrorCode.USER_USERNAME_EXISTS);
         }
 
         // Use mapper to update User entity from DTO
-        user = userMapperRegistry.updateEntityFromUpdateDto(user, updateUserDto);
+        UpdateUserRequest updateRequest = userMapStruct.toUpdateUserRequest(updateUserDto);
+        userMapStruct.updateEntityFromRequest(updateRequest, user);
 
         User updatedUser = userRepository.save(user);
-        return userMapperRegistry.toProfileDto(updatedUser);
+        return userMapStruct.toProfileDto(updatedUser);
     }
 
     @Transactional
@@ -213,13 +224,14 @@ public class UserServiceImpl implements UserService {
 
         if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
             log.warn("Password change failed - incorrect current password for: {}", LoggingUtil.maskEmail(email));
-            throw new IllegalArgumentException("Current password is incorrect");
+            throw new BusinessException("Current password is incorrect", ErrorCode.USER_INVALID_CREDENTIALS);
         }
 
         if (!PasswordUtil.isStrongPassword(newPassword)) {
             log.warn("Password change failed - weak new password for: {}", LoggingUtil.maskEmail(email));
-            throw new IllegalArgumentException(
-                    "New password is not strong enough. " + PasswordUtil.getPasswordStrengthMessage(newPassword));
+            throw new BusinessException(
+                    "New password is not strong enough. " + PasswordUtil.getPasswordStrengthMessage(newPassword),
+                    ErrorCode.USER_PASSWORD_WEAK);
         }
 
         user.setPassword(passwordEncoder.encode(newPassword));
@@ -238,8 +250,8 @@ public class UserServiceImpl implements UserService {
                 });
 
         // Generate reset token
-        // int resetToken = (int) (Math.random() * 900000) + 100000; // 6-digit number
-        int resetToken = 123456;
+        int resetToken = (int) (Math.random() * 900000) + 100000; // 6-digit number
+        // int resetToken = 123456;
         user.setLastValidationCode(resetToken);
         userRepository.save(user);
 
@@ -267,19 +279,20 @@ public class UserServiceImpl implements UserService {
             tokenValue = Integer.parseInt(resetToken);
         } catch (NumberFormatException e) {
             log.warn("Password reset failed - invalid token format: {}", resetToken);
-            throw new IllegalArgumentException("Invalid reset token format");
+            throw new BusinessException("Invalid reset token format", ErrorCode.USER_INVALID_TOKEN);
         }
 
         User user = userRepository.findByLastValidationCode(tokenValue)
                 .orElseThrow(() -> {
                     log.warn("Password reset failed - invalid token: {}", resetToken);
-                    return new IllegalArgumentException("Invalid reset token");
+                    return new BusinessException("Invalid reset token", ErrorCode.USER_INVALID_TOKEN);
                 });
 
         if (!PasswordUtil.isStrongPassword(newPassword)) {
             log.warn("Password reset failed - weak password for user: {}", LoggingUtil.maskEmail(user.getEmail()));
-            throw new IllegalArgumentException(
-                    "New password is not strong enough. " + PasswordUtil.getPasswordStrengthMessage(newPassword));
+            throw new BusinessException(
+                    "New password is not strong enough. " + PasswordUtil.getPasswordStrengthMessage(newPassword),
+                    ErrorCode.USER_PASSWORD_WEAK);
         }
 
         user.setPassword(passwordEncoder.encode(newPassword));
@@ -297,7 +310,7 @@ public class UserServiceImpl implements UserService {
                     log.warn("User deactivation failed - user not found: {}", LoggingUtil.maskEmail(email));
                     return new UserNotFoundException("User not found");
                 });
-        user.softDelete();
+        user.softDelete(user.getId());
         userRepository.save(user);
         log.info("User deactivated successfully: {}", LoggingUtil.maskEmail(email));
     }
@@ -315,7 +328,7 @@ public class UserServiceImpl implements UserService {
         // Check if email is already verified
         if (user.getIsEmailValidate()) {
             log.warn("Email verification resend failed - email already verified: {}", LoggingUtil.maskEmail(email));
-            throw new IllegalArgumentException("Email is already verified");
+            throw new BusinessException("Email is already verified", ErrorCode.USER_EMAIL_ALREADY_VERIFIED);
         }
 
         // Generate new verification token
@@ -339,7 +352,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Transactional
-    public User confirmEmail(String confirmationToken,User user) {
+    public User confirmEmail(String confirmationToken, User user) {
         log.info("Processing email confirmation with token: {}", LoggingUtil.maskSensitiveData(confirmationToken));
 
         // Find user by confirmation token
@@ -348,19 +361,19 @@ public class UserServiceImpl implements UserService {
             tokenValue = Integer.parseInt(confirmationToken);
         } catch (NumberFormatException e) {
             log.warn("Email confirmation failed - invalid token format: {}", confirmationToken);
-            throw new IllegalArgumentException("Invalid confirmation token format");
+            throw new BusinessException("Invalid confirmation token format", ErrorCode.USER_INVALID_TOKEN);
         }
 
         // Check if email is already confirmed
         if (user.getIsEmailValidate()) {
             log.warn("Email confirmation failed - email already confirmed for: {}",
                     LoggingUtil.maskEmail(user.getEmail()));
-            throw new IllegalArgumentException("Email is already confirmed");
+            throw new BusinessException("Email is already confirmed", ErrorCode.USER_EMAIL_ALREADY_VERIFIED);
         }
 
         if (user.getLastValidationCode() != tokenValue) {
             log.warn("Email confirmation failed - invalid token for: {}", LoggingUtil.maskEmail(user.getEmail()));
-            throw new IllegalArgumentException("Invalid confirmation token");
+            throw new BusinessException("Invalid confirmation token", ErrorCode.USER_INVALID_TOKEN);
         }
         // Mark email as verified and clear the token
         user.setIsEmailValidate(true);
@@ -395,5 +408,59 @@ public class UserServiceImpl implements UserService {
 
     public boolean validatePasswordStrength(String password) {
         return PasswordUtil.isStrongPassword(password);
+    }
+
+    // Search methods
+    @Override
+    @Transactional(readOnly = true)
+    public PaginatedResponse<UserSearchDto> searchUsers(String searchTerm, int page, int size) {
+        log.debug("Searching users with term: {} and pagination: page={}, size={}", searchTerm, page, size);
+
+        Pageable pageable = PageRequest.of(page, size);
+        Page<User> users = userRepository.searchActiveUsers(searchTerm, pageable);
+
+        List<UserSearchDto> userDtos = users.getContent().stream()
+                .map(this::convertToUserSearchDto)
+                .collect(Collectors.toList());
+
+        return PaginationUtil.createPaginatedResponse(
+                userDtos,
+                page,
+                size,
+                users.getTotalElements(),
+                "/api/v1/users/search");
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UserSearchDto> searchUsersByEmail(String email) {
+        log.debug("Searching users by email: {}", LoggingUtil.maskEmail(email));
+
+        List<User> users = userRepository.searchActiveUsersByEmail(email);
+        return users.stream()
+                .map(this::convertToUserSearchDto)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Convert User entity to UserSearchDto.
+     * 
+     * @param user User entity
+     * @return UserSearchDto
+     */
+    private UserSearchDto convertToUserSearchDto(User user) {
+        return UserSearchDto.builder()
+                .id(user.getId())
+                .email(user.getEmail())
+                .username(user.getUsername())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .fullName(user.getFullName())
+                .contactNumber(user.getContactNumber())
+                .profilePictureUrl(null) // TODO: Add profile picture support
+                .isEmailVerified(user.getIsEmailValidate())
+                .isGoogleAuth(user.getIsGoogleAuth())
+                .status(user.getStatus() != null ? user.getStatus().name() : "ACTIVE")
+                .build();
     }
 }

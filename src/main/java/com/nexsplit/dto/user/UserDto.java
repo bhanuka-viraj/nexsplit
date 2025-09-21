@@ -41,4 +41,7 @@ public class UserDto {
     @Pattern(regexp = "^\\d{10}$", message = "Contact number must be exactly 10 digits")
     private String contactNumber;
 
+    private Integer lastValidationCode;
+    private java.util.List<com.nexsplit.dto.notification.NotificationDto> notifications;
+
 }

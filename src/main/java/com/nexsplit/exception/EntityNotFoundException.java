@@ -115,4 +115,37 @@ public class EntityNotFoundException extends RuntimeException {
                 debtId,
                 ErrorCode.DEBT_NOT_FOUND);
     }
+
+    /**
+     * Static factory method for creating Attachment not found exceptions.
+     */
+    public static EntityNotFoundException attachmentNotFound(String attachmentId) {
+        return new EntityNotFoundException(
+                "Attachment not found",
+                Attachment.class,
+                attachmentId,
+                ErrorCode.ATTACHMENT_NOT_FOUND);
+    }
+
+    /**
+     * Static factory method for creating Bill not found exceptions.
+     */
+    public static EntityNotFoundException billNotFound(String billId) {
+        return new EntityNotFoundException(
+                "Bill not found",
+                Bill.class,
+                billId,
+                ErrorCode.BILL_NOT_FOUND);
+    }
+
+    /**
+     * Static factory method for creating BillParticipant not found exceptions.
+     */
+    public static EntityNotFoundException billParticipantNotFound(String billId, String userId) {
+        return new EntityNotFoundException(
+                String.format("Bill participant not found for bill %s and user %s", billId, userId),
+                BillParticipant.class,
+                String.format("%s-%s", billId, userId),
+                ErrorCode.BILL_PARTICIPANT_NOT_FOUND);
+    }
 }

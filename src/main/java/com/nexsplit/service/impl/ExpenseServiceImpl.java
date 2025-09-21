@@ -4,18 +4,17 @@ import com.nexsplit.dto.PaginatedResponse;
 import com.nexsplit.dto.expense.CreateExpenseRequest;
 import com.nexsplit.dto.expense.ExpenseDto;
 import com.nexsplit.dto.expense.ExpenseFilter;
-import com.nexsplit.dto.expense.ExpenseSummaryDto;
+import com.nexsplit.model.view.ExpenseSummaryView;
 import com.nexsplit.dto.expense.UpdateExpenseRequest;
 import com.nexsplit.exception.BusinessException;
 import com.nexsplit.exception.EntityNotFoundException;
-import com.nexsplit.mapper.expense.ExpenseMapper;
+import com.nexsplit.mapper.expense.ExpenseMapStruct;
 import com.nexsplit.model.*;
 import com.nexsplit.repository.*;
+import com.nexsplit.repository.ExpenseSummaryRepository;
 import com.nexsplit.service.ExpenseService;
-import com.nexsplit.service.NexService;
 import com.nexsplit.util.StructuredLoggingUtil;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -42,8 +41,8 @@ public class ExpenseServiceImpl implements ExpenseService {
         private final CategoryRepository categoryRepository;
         private final UserRepository userRepository;
         private final NexMemberRepository nexMemberRepository;
-        private final NexService nexService;
-        private final ExpenseMapper expenseMapper;
+        private final ExpenseMapStruct expenseMapStruct;
+        private final ExpenseSummaryRepository expenseSummaryRepository;
 
         public ExpenseServiceImpl(ExpenseRepository expenseRepository,
                         SplitRepository splitRepository,
@@ -51,16 +50,16 @@ public class ExpenseServiceImpl implements ExpenseService {
                         CategoryRepository categoryRepository,
                         UserRepository userRepository,
                         NexMemberRepository nexMemberRepository,
-                        @Lazy NexService nexService,
-                        ExpenseMapper expenseMapper) {
+                        ExpenseMapStruct expenseMapStruct,
+                        ExpenseSummaryRepository expenseSummaryRepository) {
                 this.expenseRepository = expenseRepository;
                 this.splitRepository = splitRepository;
                 this.debtRepository = debtRepository;
                 this.categoryRepository = categoryRepository;
                 this.userRepository = userRepository;
                 this.nexMemberRepository = nexMemberRepository;
-                this.nexService = nexService;
-                this.expenseMapper = expenseMapper;
+                this.expenseMapStruct = expenseMapStruct;
+                this.expenseSummaryRepository = expenseSummaryRepository;
         }
 
         @Override
@@ -73,7 +72,7 @@ public class ExpenseServiceImpl implements ExpenseService {
                                 .orElseThrow(() -> EntityNotFoundException.userNotFound(userId));
 
                 // Validate nex exists and user is member
-                if (!nexService.isMember(request.getNexId(), userId)) {
+                if (!isNexMember(request.getNexId(), userId)) {
                         throw new BusinessException("User is not a member of this expense group",
                                         com.nexsplit.dto.ErrorCode.AUTHZ_NEX_ACCESS_DENIED);
                 }
@@ -86,13 +85,13 @@ public class ExpenseServiceImpl implements ExpenseService {
                 userRepository.findById(request.getPayerId())
                                 .orElseThrow(() -> EntityNotFoundException.userNotFound(request.getPayerId()));
 
-                if (!nexService.isMember(request.getNexId(), request.getPayerId())) {
+                if (!isNexMember(request.getNexId(), request.getPayerId())) {
                         throw new BusinessException("Payer is not a member of this expense group",
                                         com.nexsplit.dto.ErrorCode.EXPENSE_PAYER_NOT_MEMBER);
                 }
 
                 // Create expense entity
-                Expense expense = expenseMapper.toEntity(request);
+                Expense expense = expenseMapStruct.toEntity(request);
                 expense.setCreatedBy(userId);
                 expense.setIsDeleted(false);
 
@@ -122,7 +121,7 @@ public class ExpenseServiceImpl implements ExpenseService {
                                                 "splitCount", splits.size()));
 
                 log.info("Expense created successfully: {}", savedExpense.getId());
-                return expenseMapper.toDto(savedExpense);
+                return expenseMapStruct.toDto(savedExpense);
         }
 
         @Override
@@ -139,7 +138,7 @@ public class ExpenseServiceImpl implements ExpenseService {
                                         com.nexsplit.dto.ErrorCode.AUTHZ_NEX_ACCESS_DENIED);
                 }
 
-                return expenseMapper.toDto(expense);
+                return expenseMapStruct.toDto(expense);
         }
 
         @Override
@@ -156,7 +155,13 @@ public class ExpenseServiceImpl implements ExpenseService {
                 // Apply filters
                 if (filter.getNexId() != null) {
                         // Check if user is member of nex
-                        if (!nexService.isMember(filter.getNexId(), userId)) {
+                        boolean isMember = isNexMember(filter.getNexId(), userId);
+                        log.info("Authorization check for user {} in nex {} (via filter): isMember={}", userId,
+                                        filter.getNexId(), isMember);
+
+                        if (!isMember) {
+                                log.warn("Access denied: User {} is not a member of nex {} (via filter)", userId,
+                                                filter.getNexId());
                                 throw new BusinessException("User is not a member of this expense group",
                                                 com.nexsplit.dto.ErrorCode.AUTHZ_NEX_ACCESS_DENIED);
                         }
@@ -169,7 +174,7 @@ public class ExpenseServiceImpl implements ExpenseService {
                 }
 
                 List<ExpenseDto> expenseDtos = expensePage.getContent().stream()
-                                .map(expenseMapper::toDto)
+                                .map(expenseMapStruct::toDto)
                                 .collect(Collectors.toList());
 
                 return PaginatedResponse.<ExpenseDto>builder()
@@ -191,7 +196,11 @@ public class ExpenseServiceImpl implements ExpenseService {
                 log.info("Getting expenses for nex: {} by user: {}, page: {}, size: {}", nexId, userId, page, size);
 
                 // Check if user is member of nex
-                if (!nexService.isMember(nexId, userId)) {
+                boolean isMember = isNexMember(nexId, userId);
+                log.info("Authorization check for user {} in nex {}: isMember={}", userId, nexId, isMember);
+
+                if (!isMember) {
+                        log.warn("Access denied: User {} is not a member of nex {}", userId, nexId);
                         throw new BusinessException("User is not a member of this expense group",
                                         com.nexsplit.dto.ErrorCode.AUTHZ_NEX_ACCESS_DENIED);
                 }
@@ -200,7 +209,7 @@ public class ExpenseServiceImpl implements ExpenseService {
                 Page<Expense> expensePage = expenseRepository.findByNexIdAndIsDeletedFalse(nexId, pageable);
 
                 List<ExpenseDto> expenseDtos = expensePage.getContent().stream()
-                                .map(expenseMapper::toDto)
+                                .map(expenseMapStruct::toDto)
                                 .collect(Collectors.toList());
 
                 return PaginatedResponse.<ExpenseDto>builder()
@@ -225,7 +234,7 @@ public class ExpenseServiceImpl implements ExpenseService {
                 Page<Expense> expensePage = expenseRepository.findExpensesByUserInvolvement(userId, pageable);
 
                 List<ExpenseDto> expenseDtos = expensePage.getContent().stream()
-                                .map(expenseMapper::toDto)
+                                .map(expenseMapStruct::toDto)
                                 .collect(Collectors.toList());
 
                 return PaginatedResponse.<ExpenseDto>builder()
@@ -256,7 +265,7 @@ public class ExpenseServiceImpl implements ExpenseService {
                 }
 
                 // Update expense fields
-                expenseMapper.updateEntityFromRequest(request, expense);
+                expenseMapStruct.updateEntityFromRequest(request, expense);
 
                 // If splits are provided, recalculate them
                 if (request.getSplits() != null) {
@@ -285,7 +294,7 @@ public class ExpenseServiceImpl implements ExpenseService {
                                 Map.of("expenseId", expenseId, "nexId", expense.getNexId()));
 
                 log.info("Expense updated successfully: {}", expenseId);
-                return expenseMapper.toDto(updatedExpense);
+                return expenseMapStruct.toDto(updatedExpense);
         }
 
         @Override
@@ -318,30 +327,26 @@ public class ExpenseServiceImpl implements ExpenseService {
 
         @Override
         @Transactional(readOnly = true)
-        public ExpenseSummaryDto getExpenseSummary(String nexId, String userId) {
+        public ExpenseSummaryView getExpenseSummary(String nexId, String userId) {
                 log.info("Getting expense summary for nex: {} by user: {}", nexId, userId);
 
                 // Check if user is member of nex
-                if (!nexService.isMember(nexId, userId)) {
+                if (!isNexMember(nexId, userId)) {
                         throw new BusinessException("User is not a member of this expense group",
                                         com.nexsplit.dto.ErrorCode.AUTHZ_NEX_ACCESS_DENIED);
                 }
 
-                // Get total amount and count
-                BigDecimal totalAmount = expenseRepository.calculateTotalAmountByNexId(nexId);
-                long totalCount = expenseRepository.countByNexIdAndIsDeletedFalse(nexId);
+                // Get expense summary from database view
+                List<ExpenseSummaryView> summaries = expenseSummaryRepository.findByNexId(nexId);
 
-                // Get unsettled debt amount
-                List<Debt> unsettledDebts = debtRepository.findUnsettledByNexId(nexId);
-                BigDecimal unsettledAmount = unsettledDebts.stream()
-                                .map(Debt::getAmount)
-                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+                // For now, return the first summary or create a basic one
+                // In a real implementation, you might want to aggregate multiple summaries
+                if (!summaries.isEmpty()) {
+                        return summaries.get(0);
+                }
 
-                return ExpenseSummaryDto.builder()
-                                .totalExpenses((int) totalCount)
-                                .totalExpenseAmount(totalAmount)
-                                .unsettledAmount(unsettledAmount)
-                                .build();
+                // Return null if no summary found
+                return null;
         }
 
         @Override
@@ -356,7 +361,7 @@ public class ExpenseServiceImpl implements ExpenseService {
                 // Filter expenses where user has access
                 List<ExpenseDto> expenseDtos = expensePage.getContent().stream()
                                 .filter(expense -> hasAccessToExpense(expense.getId(), userId))
-                                .map(expenseMapper::toDto)
+                                .map(expenseMapStruct::toDto)
                                 .collect(Collectors.toList());
 
                 return PaginatedResponse.<ExpenseDto>builder()
@@ -390,7 +395,7 @@ public class ExpenseServiceImpl implements ExpenseService {
                                 .filter(expense -> hasAccessToExpense(expense.getId(), userId))
                                 .skip((long) page * size)
                                 .limit(size)
-                                .map(expenseMapper::toDto)
+                                .map(expenseMapStruct::toDto)
                                 .collect(Collectors.toList());
 
                 return PaginatedResponse.<ExpenseDto>builder()
@@ -418,7 +423,7 @@ public class ExpenseServiceImpl implements ExpenseService {
                                 .filter(expense -> hasAccessToExpense(expense.getId(), userId))
                                 .skip((long) page * size)
                                 .limit(size)
-                                .map(expenseMapper::toDto)
+                                .map(expenseMapStruct::toDto)
                                 .collect(Collectors.toList());
 
                 return PaginatedResponse.<ExpenseDto>builder()
@@ -443,7 +448,7 @@ public class ExpenseServiceImpl implements ExpenseService {
                 }
 
                 // Check if user is member of the nex
-                return nexService.isMember(expense.getNexId(), userId);
+                return isNexMember(expense.getNexId(), userId);
         }
 
         @Override
@@ -455,7 +460,7 @@ public class ExpenseServiceImpl implements ExpenseService {
                 }
 
                 // Check if user is the creator or an admin of the nex
-                return expense.getCreatedBy().equals(userId) || nexService.isAdmin(expense.getNexId(), userId);
+                return expense.getCreatedBy().equals(userId) || isNexAdmin(expense.getNexId(), userId);
         }
 
         /**
@@ -483,8 +488,65 @@ public class ExpenseServiceImpl implements ExpenseService {
                         splits = createAmountSplits(expense, amountSplits);
                 }
 
+                // Validate that total split amounts equal expense amount (accounting for
+                // rounding)
+                BigDecimal totalSplitAmount = splits.stream()
+                                .map(Split::getAmount)
+                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                BigDecimal difference = totalSplitAmount.subtract(expense.getAmount()).abs();
+                if (difference.compareTo(BigDecimal.valueOf(0.01)) > 0) { // Allow 1 cent difference for rounding
+                        throw new BusinessException("Split amounts do not equal expense amount. Total: " +
+                                        totalSplitAmount + ", Expense: " + expense.getAmount(),
+                                        com.nexsplit.dto.ErrorCode.EXPENSE_SPLIT_INVALID);
+                }
+
                 // Save splits
                 return splitRepository.saveAll(splits);
+        }
+
+        /**
+         * Check if user is a member of the nex group.
+         * 
+         * @param nexId  The nex ID
+         * @param userId The user ID
+         * @return true if user is an active member
+         */
+        private boolean isNexMember(String nexId, String userId) {
+                log.debug("Checking if user {} is member of nex {}", userId, nexId);
+
+                Optional<com.nexsplit.model.NexMember> nexMemberOpt = nexMemberRepository.findByNexIdAndUserId(nexId,
+                                userId);
+
+                if (nexMemberOpt.isEmpty()) {
+                        log.debug("User {} is not found as member of nex {}", userId, nexId);
+                        return false;
+                }
+
+                com.nexsplit.model.NexMember nexMember = nexMemberOpt.get();
+                boolean isActive = nexMember.getStatus() == com.nexsplit.model.NexMember.MemberStatus.ACTIVE;
+                boolean isNotDeleted = !nexMember.isDeleted();
+                boolean isMember = isActive && isNotDeleted;
+
+                log.debug("User {} membership status for nex {}: active={}, notDeleted={}, isMember={}",
+                                userId, nexId, isActive, isNotDeleted, isMember);
+
+                return isMember;
+        }
+
+        /**
+         * Check if user is an admin of the nex group.
+         * 
+         * @param nexId  The nex ID
+         * @param userId The user ID
+         * @return true if user is an admin
+         */
+        private boolean isNexAdmin(String nexId, String userId) {
+                return nexMemberRepository.findByNexIdAndUserId(nexId, userId)
+                                .map(nexMember -> nexMember.getRole() == com.nexsplit.model.NexMember.MemberRole.ADMIN
+                                                && nexMember.getStatus() == com.nexsplit.model.NexMember.MemberStatus.ACTIVE
+                                                && !nexMember.isDeleted())
+                                .orElse(false);
         }
 
         /**
@@ -506,6 +568,10 @@ public class ExpenseServiceImpl implements ExpenseService {
                                 RoundingMode.HALF_UP);
 
                 for (String memberId : memberIds) {
+                        // Fetch the user entity to set the relationship
+                        User user = userRepository.findById(memberId)
+                                        .orElseThrow(() -> EntityNotFoundException.userNotFound(memberId));
+
                         SplitId splitId = SplitId.builder()
                                         .expenseId(expense.getId())
                                         .userId(memberId)
@@ -516,6 +582,7 @@ public class ExpenseServiceImpl implements ExpenseService {
                                         .percentage(percentagePerPerson)
                                         .amount(amountPerPerson)
                                         .expense(expense)
+                                        .user(user)
                                         .build();
 
                         splits.add(split);
@@ -544,6 +611,10 @@ public class ExpenseServiceImpl implements ExpenseService {
                 }
 
                 for (CreateExpenseRequest.CreateSplitRequest request : splitRequests) {
+                        // Fetch the user entity to set the relationship
+                        User user = userRepository.findById(request.getUserId())
+                                        .orElseThrow(() -> EntityNotFoundException.userNotFound(request.getUserId()));
+
                         BigDecimal amount = totalAmount.multiply(request.getPercentage()).divide(
                                         BigDecimal.valueOf(100), 2,
                                         RoundingMode.HALF_UP);
@@ -559,6 +630,7 @@ public class ExpenseServiceImpl implements ExpenseService {
                                         .amount(amount)
                                         .notes(request.getNotes())
                                         .expense(expense)
+                                        .user(user)
                                         .build();
 
                         splits.add(split);
@@ -587,6 +659,10 @@ public class ExpenseServiceImpl implements ExpenseService {
                 }
 
                 for (CreateExpenseRequest.CreateSplitRequest request : splitRequests) {
+                        // Fetch the user entity to set the relationship
+                        User user = userRepository.findById(request.getUserId())
+                                        .orElseThrow(() -> EntityNotFoundException.userNotFound(request.getUserId()));
+
                         BigDecimal percentage = request.getAmount().multiply(BigDecimal.valueOf(100)).divide(
                                         totalAmount, 2,
                                         RoundingMode.HALF_UP);
@@ -602,6 +678,7 @@ public class ExpenseServiceImpl implements ExpenseService {
                                         .amount(request.getAmount())
                                         .notes(request.getNotes())
                                         .expense(expense)
+                                        .user(user)
                                         .build();
 
                         splits.add(split);

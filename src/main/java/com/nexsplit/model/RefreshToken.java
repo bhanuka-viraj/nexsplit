@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "refresh_tokens")
+@EntityListeners({})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

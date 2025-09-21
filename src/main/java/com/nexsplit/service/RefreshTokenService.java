@@ -1,7 +1,6 @@
 package com.nexsplit.service;
 
 import com.nexsplit.dto.auth.RefreshTokenResponse;
-import com.nexsplit.service.impl.RefreshTokenServiceImpl;
 
 public interface RefreshTokenService {
     String generateRefreshToken(String userId, String userAgent);

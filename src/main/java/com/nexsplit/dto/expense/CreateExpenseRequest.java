@@ -31,7 +31,7 @@ public class CreateExpenseRequest {
 
     @Size(max = 10, message = "Currency must not exceed 10 characters")
     @Builder.Default
-    private String currency = "USD";
+    private String currency = "USD"; // TODO: Replace with configuration property
 
     @NotBlank(message = "Category ID is required")
     private String categoryId;

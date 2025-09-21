@@ -7,7 +7,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Data
 @Builder
@@ -30,7 +29,7 @@ public class NexDto {
     private String creatorName;
     private String creatorUsername;
     private Integer memberCount;
-    private List<NexMemberDto> members;
     private Integer expenseCount;
+    private java.math.BigDecimal totalExpenseAmount;
     private Integer categoryCount;
 }

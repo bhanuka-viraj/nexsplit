@@ -25,6 +25,36 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
+/**
+ * Security configuration for NexSplit application.
+ * 
+ * This configuration class sets up Spring Security with JWT-based
+ * authentication,
+ * CORS support, and role-based authorization. It provides comprehensive
+ * security
+ * features including:
+ * 
+ * - JWT token-based authentication
+ * - OAuth2 integration for Google Sign-In
+ * - Role-based access control (RBAC)
+ * - CORS configuration for cross-origin requests
+ * - Password encryption with BCrypt
+ * - Session management
+ * - Exception handling for authentication failures
+ * 
+ * Security Features:
+ * - CSRF protection disabled for API endpoints
+ * - Stateless session management
+ * - JWT filter for token validation
+ * - Custom authentication entry point
+ * - Configurable CORS settings
+ * - Admin role protection for admin endpoints
+ * - Public access for authentication and documentation endpoints
+ * 
+ * @author NexSplit Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
@@ -34,6 +64,21 @@ public class SecurityConfig {
     private final CustomUserDetailsServiceImpl userDetailsService;
     private final ApiConfig apiConfig;
 
+    /**
+     * Configures the security filter chain for the application.
+     * 
+     * This method sets up the complete security configuration including:
+     * - CSRF protection (disabled for API)
+     * - CORS configuration
+     * - Session management (stateless)
+     * - Authorization rules for different endpoints
+     * - Exception handling for authentication failures
+     * - JWT filter integration
+     * 
+     * @param http HttpSecurity configuration builder
+     * @return Configured SecurityFilterChain
+     * @throws Exception if configuration fails
+     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -63,17 +108,40 @@ public class SecurityConfig {
     // This provides better support for mobile apps and web apps using Google
     // Sign-In SDK
 
+    /**
+     * Configures the authentication manager for the application.
+     * 
+     * @param authenticationConfiguration Spring Security authentication
+     *                                    configuration
+     * @return Configured AuthenticationManager
+     * @throws Exception if configuration fails
+     */
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration authenticationConfiguration)
             throws Exception {
         return authenticationConfiguration.getAuthenticationManager();
     }
 
+    /**
+     * Configures the password encoder for the application.
+     * 
+     * Uses BCrypt with strength 12 for secure password hashing.
+     * 
+     * @return BCryptPasswordEncoder instance
+     */
     @Bean
     public BCryptPasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder(12);
     }
 
+    /**
+     * Configures CORS (Cross-Origin Resource Sharing) for the application.
+     * 
+     * This method sets up CORS configuration to allow cross-origin requests
+     * from configured origins, methods, and headers.
+     * 
+     * @return CorsConfigurationSource with CORS settings
+     */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();

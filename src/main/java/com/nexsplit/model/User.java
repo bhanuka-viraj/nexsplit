@@ -2,22 +2,23 @@ package com.nexsplit.model;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
+import lombok.experimental.SuperBuilder;
 
-import java.time.LocalDateTime;
+import java.util.List;
 
 @Entity
 @Table(name = "users")
 @Data
+@SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class User {
+@EqualsAndHashCode(callSuper = true)
+public class User extends BaseEntity {
     @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
     @Column(length = 36)
     private String id;
 
@@ -40,35 +41,47 @@ public class User {
     private String contactNumber;
 
     @Column(name = "last_validation_code")
-    @Builder.Default
+    @lombok.Builder.Default
     private Integer lastValidationCode = 0;
 
     @Column(name = "is_email_validate")
-    @Builder.Default
+    @lombok.Builder.Default
     private Boolean isEmailValidate = false;
 
     @Column(name = "is_google_auth")
-    @Builder.Default
+    @lombok.Builder.Default
     private Boolean isGoogleAuth = false;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    @Builder.Default
+    @lombok.Builder.Default
     private Status status = Status.ACTIVE;
-
-    @CreationTimestamp
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-
-    @UpdateTimestamp
-    @Column(name = "modified_at", nullable = false)
-    private LocalDateTime modifiedAt;
-
-    @Column(name = "deleted_at")
-    private LocalDateTime deletedAt;
 
     public enum Status {
         ACTIVE, INACTIVE
+    }
+
+    /**
+     * Ensure default values are set before persisting
+     */
+    @PrePersist
+    protected void onUserPrePersist() {
+        // Ensure BaseEntity default values are set
+        ensureDefaultValues();
+
+        // Set User-specific default values
+        if (lastValidationCode == null) {
+            lastValidationCode = 0;
+        }
+        if (isEmailValidate == null) {
+            isEmailValidate = false;
+        }
+        if (isGoogleAuth == null) {
+            isGoogleAuth = false;
+        }
+        if (status == null) {
+            status = Status.ACTIVE;
+        }
     }
 
     // Helper method to get full name
@@ -97,12 +110,16 @@ public class User {
 
     // Helper method to check if user is active
     public boolean isActive() {
-        return Status.ACTIVE.equals(this.status) && this.deletedAt == null;
+        return Status.ACTIVE.equals(this.status) && !isDeleted();
     }
 
     // Helper method to soft delete user
-    public void softDelete() {
+    public void softDelete(String deletedBy) {
         this.status = Status.INACTIVE;
-        this.deletedAt = LocalDateTime.now();
+        super.softDelete(deletedBy);
     }
+
+    // Relationships (lazy loaded to avoid circular dependencies)
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<Notification> notifications;
 }

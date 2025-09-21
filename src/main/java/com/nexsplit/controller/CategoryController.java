@@ -13,6 +13,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -57,23 +59,8 @@ public class CategoryController {
         @GetMapping
         @Operation(summary = "List User Categories", description = "Get paginated personal categories for the current user", security = @SecurityRequirement(name = "bearerAuth"))
         public ResponseEntity<ApiResponse<PaginatedResponse<CategorySummaryDto>>> getUserCategories(
-                        @RequestParam(defaultValue = "0") int page,
-                        @RequestParam(defaultValue = "10") int size,
-                        @AuthenticationPrincipal UserDetails userDetails) {
-
-                String userId = userDetails.getUsername();
-
-                PaginatedResponse<CategorySummaryDto> response = categoryService.getPersonalCategories(userId, page,
-                                size);
-
-                return ResponseEntity.ok(ApiResponse.success(response, "Personal categories retrieved successfully"));
-        }
-
-        @GetMapping("/personal")
-        @Operation(summary = "List Personal Categories", description = "Get paginated personal categories for the current user", security = @SecurityRequirement(name = "bearerAuth"))
-        public ResponseEntity<ApiResponse<PaginatedResponse<CategorySummaryDto>>> getPersonalCategories(
-                        @RequestParam(defaultValue = "0") int page,
-                        @RequestParam(defaultValue = "10") int size,
+                        @RequestParam(defaultValue = "0") @Min(0) int page,
+                        @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size,
                         @AuthenticationPrincipal UserDetails userDetails) {
 
                 String userId = userDetails.getUsername();
@@ -87,8 +74,8 @@ public class CategoryController {
         @GetMapping("/default")
         @Operation(summary = "List Default Categories", description = "Get paginated default categories available to all users", security = @SecurityRequirement(name = "bearerAuth"))
         public ResponseEntity<ApiResponse<PaginatedResponse<CategorySummaryDto>>> getDefaultCategories(
-                        @RequestParam(defaultValue = "0") int page,
-                        @RequestParam(defaultValue = "10") int size,
+                        @RequestParam(defaultValue = "0") @Min(0) int page,
+                        @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size,
                         @AuthenticationPrincipal UserDetails userDetails) {
 
                 PaginatedResponse<CategorySummaryDto> response = categoryService.getDefaultCategories(page, size);

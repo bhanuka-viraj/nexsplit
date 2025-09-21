@@ -2,21 +2,35 @@ package com.nexsplit.model;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.GenericGenerator;
+import lombok.experimental.SuperBuilder;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * Debt entity representing debts between users.
+ * 
+ * This entity stores information about debts created from expense splits,
+ * including debtor, creditor, amount, payment method, and settlement status.
+ * Debts are automatically generated when expenses are split among users.
+ * 
+ * Database table: debts
+ * 
+ * @author NexSplit Team
+ * @version 1.0
+ * @since 1.0
+ */
 @Entity
 @Table(name = "debts")
 @Data
-@Builder
+@SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-public class Debt {
+@EqualsAndHashCode(callSuper = true)
+public class Debt extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -48,12 +62,6 @@ public class Debt {
     @Column(name = "settled_at")
     private LocalDateTime settledAt;
 
-    @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt;
-
-    @Column(name = "modified_at", nullable = false)
-    private LocalDateTime modifiedAt;
-
     // Relationships
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "debtor_id", insertable = false, updatable = false)
@@ -71,14 +79,36 @@ public class Debt {
         USER, EXPENSE
     }
 
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        modifiedAt = LocalDateTime.now();
+    /**
+     * Mark the debt as settled.
+     * 
+     * @param settledAt The timestamp when the debt was settled
+     */
+    public void markAsSettled(LocalDateTime settledAt) {
+        this.settledAt = settledAt;
     }
 
-    @PreUpdate
-    protected void onUpdate() {
-        modifiedAt = LocalDateTime.now();
+    /**
+     * Mark the debt as unsettled.
+     */
+    public void markAsUnsettled() {
+        this.settledAt = null;
+    }
+
+    /**
+     * Check if the debt is settled.
+     * 
+     * @return true if the debt is settled, false otherwise
+     */
+    public boolean isSettled() {
+        return this.settledAt != null;
+    }
+
+    /**
+     * Ensure default values are set before persisting
+     */
+    @PrePersist
+    protected void onPrePersist() {
+        ensureDefaultValues();
     }
 }

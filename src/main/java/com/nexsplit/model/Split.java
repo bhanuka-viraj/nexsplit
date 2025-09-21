@@ -2,21 +2,20 @@ package com.nexsplit.model;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
-import lombok.experimental.SuperBuilder;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "splits")
 @Data
-@SuperBuilder
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@EqualsAndHashCode(callSuper = true)
-public class Split extends BaseEntity {
+public class Split {
 
     @EmbeddedId
     private SplitId id;
@@ -30,6 +29,12 @@ public class Split extends BaseEntity {
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @Column(name = "modified_at")
+    private LocalDateTime modifiedAt;
+
     // Relationships
     @ManyToOne(fetch = FetchType.LAZY)
     @MapsId("expenseId")
@@ -41,4 +46,14 @@ public class Split extends BaseEntity {
     @JoinColumn(name = "user_id")
     private User user;
 
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+        modifiedAt = LocalDateTime.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        modifiedAt = LocalDateTime.now();
+    }
 }

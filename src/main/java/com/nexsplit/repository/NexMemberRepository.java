@@ -22,7 +22,7 @@ public interface NexMemberRepository extends SoftDeleteRepository<NexMember, Nex
     @Query("SELECT nm FROM NexMember nm WHERE nm.id.nexId = :nexId AND nm.isDeleted = false")
     List<NexMember> findAllMembersByNexId(@Param("nexId") String nexId);
 
-    @Query("SELECT nm FROM NexMember nm WHERE nm.id.nexId = :nexId AND nm.isDeleted = false")
+    @Query("SELECT nm FROM NexMember nm JOIN FETCH nm.user WHERE nm.id.nexId = :nexId AND nm.isDeleted = false")
     Page<NexMember> findAllMembersByNexIdPaginated(@Param("nexId") String nexId, Pageable pageable);
 
     @Query("SELECT nm FROM NexMember nm WHERE nm.id.userId = :userId AND nm.status = 'ACTIVE' AND nm.isDeleted = false")

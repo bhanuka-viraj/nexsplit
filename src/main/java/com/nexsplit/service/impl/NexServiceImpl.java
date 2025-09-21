@@ -3,26 +3,23 @@ package com.nexsplit.service.impl;
 import com.nexsplit.dto.nex.CreateNexRequest;
 import com.nexsplit.dto.nex.NexDto;
 import com.nexsplit.dto.nex.NexSummaryDto;
+import com.nexsplit.model.view.NexAnalyticsView;
 import com.nexsplit.dto.nex.UpdateNexRequest;
 import com.nexsplit.dto.PaginatedResponse;
-import com.nexsplit.dto.expense.ExpenseSummaryDto;
-import com.nexsplit.dto.category.CategorySummaryDto;
 import com.nexsplit.dto.ErrorCode;
 import com.nexsplit.exception.BusinessException;
 import com.nexsplit.exception.EntityNotFoundException;
-import com.nexsplit.mapper.nex.NexMapper;
+import com.nexsplit.mapper.nex.NexMapStruct;
 import com.nexsplit.model.Nex;
 import com.nexsplit.model.NexMember;
 import com.nexsplit.model.NexMemberId;
 import com.nexsplit.model.User;
 import com.nexsplit.repository.NexMemberRepository;
 import com.nexsplit.repository.NexRepository;
+import com.nexsplit.repository.NexAnalyticsRepository;
 import com.nexsplit.repository.UserRepository;
 import com.nexsplit.service.NexService;
-import com.nexsplit.service.ExpenseService;
-import com.nexsplit.service.CategoryService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -38,23 +35,20 @@ public class NexServiceImpl implements NexService {
 
         private final NexRepository nexRepository;
         private final NexMemberRepository nexMemberRepository;
+        private final NexAnalyticsRepository nexAnalyticsRepository;
         private final UserRepository userRepository;
-        private final NexMapper nexMapper;
-        private final ExpenseService expenseService;
-        private final CategoryService categoryService;
+        private final NexMapStruct nexMapStruct;
 
         public NexServiceImpl(NexRepository nexRepository,
                         NexMemberRepository nexMemberRepository,
+                        NexAnalyticsRepository nexAnalyticsRepository,
                         UserRepository userRepository,
-                        NexMapper nexMapper,
-                        @Lazy ExpenseService expenseService,
-                        @Lazy CategoryService categoryService) {
+                        NexMapStruct nexMapStruct) {
                 this.nexRepository = nexRepository;
                 this.nexMemberRepository = nexMemberRepository;
+                this.nexAnalyticsRepository = nexAnalyticsRepository;
                 this.userRepository = userRepository;
-                this.nexMapper = nexMapper;
-                this.expenseService = expenseService;
-                this.categoryService = categoryService;
+                this.nexMapStruct = nexMapStruct;
         }
 
         @Override
@@ -67,7 +61,7 @@ public class NexServiceImpl implements NexService {
                                 .orElseThrow(() -> EntityNotFoundException.userNotFound(userId));
 
                 // Create nex
-                Nex nex = nexMapper.toEntity(request);
+                Nex nex = nexMapStruct.toEntity(request);
                 nex.setIsArchived(false);
                 nex.setIsDeleted(false);
                 nex.setCreatedBy(userId);
@@ -93,7 +87,7 @@ public class NexServiceImpl implements NexService {
                 nexMemberRepository.save(creatorMember);
 
                 log.info("Nex created successfully: {}", savedNex.getId());
-                return nexMapper.toDto(savedNex);
+                return nexMapStruct.toDto(savedNex);
         }
 
         @Override
@@ -104,7 +98,7 @@ public class NexServiceImpl implements NexService {
                 Nex nex = nexRepository.findByIdAndMembersUserId(nexId, userId)
                                 .orElseThrow(() -> EntityNotFoundException.nexNotFound(nexId));
 
-                return nexMapper.toDto(nex);
+                return nexMapStruct.toDto(nex);
         }
 
         @Override
@@ -121,11 +115,11 @@ public class NexServiceImpl implements NexService {
                 Nex nex = nexRepository.findByIdAndNotDeleted(nexId)
                                 .orElseThrow(() -> EntityNotFoundException.nexNotFound(nexId));
 
-                nexMapper.updateEntityFromRequest(request, nex);
+                nexMapStruct.updateEntityFromRequest(request, nex);
                 Nex updatedNex = nexRepository.save(nex);
 
                 log.info("Nex updated successfully: {}", nexId);
-                return nexMapper.toDto(updatedNex);
+                return nexMapStruct.toDto(updatedNex);
         }
 
         @Override
@@ -178,7 +172,7 @@ public class NexServiceImpl implements NexService {
                 Page<Nex> nexPage = nexRepository.findByMembersUserId(userId, pageable);
 
                 List<NexDto> nexDtos = nexPage.getContent().stream()
-                                .map(nexMapper::toDto)
+                                .map(nexMapStruct::toDto)
                                 .collect(Collectors.toList());
 
                 return PaginatedResponse.<NexDto>builder()
@@ -204,33 +198,14 @@ public class NexServiceImpl implements NexService {
                         throw new BusinessException("Access denied", ErrorCode.AUTHZ_NEX_ACCESS_DENIED);
                 }
 
-                Nex nex = nexRepository.findByIdAndNotDeleted(nexId)
+                // Get nex analytics from view for optimal performance
+                NexAnalyticsView analytics = nexAnalyticsRepository.findByNexId(nexId)
                                 .orElseThrow(() -> EntityNotFoundException.nexNotFound(nexId));
 
-                // Get member count
-                long memberCount = nexMemberRepository.countActiveMembersByNexId(nexId);
-
-                // Get expense summary
-                ExpenseSummaryDto expenseSummary = expenseService.getExpenseSummary(nexId, userId);
-
-                // Get category count (we'll get a small page to count)
-                PaginatedResponse<CategorySummaryDto> categoriesResponse = categoryService.getCategoriesByNexId(nexId,
-                                userId, 0, 1);
-                int totalCategories = (int) categoriesResponse.getPagination().getTotalElements();
-
                 return NexSummaryDto.builder()
-                                .nexId(nexId)
-                                .nexName(nex.getName())
-                                .totalMembers((int) memberCount)
-                                .totalExpenses(expenseSummary.getTotalExpenses())
-                                .totalCategories(totalCategories)
-                                .totalExpenseAmount(expenseSummary.getTotalExpenseAmount())
-                                .totalDebtAmount(expenseSummary.getUnsettledAmount()) // Using unsettled amount as debt
-                                                                                      // amount
-                                .totalSettledAmount(expenseSummary.getTotalExpenseAmount()
-                                                .subtract(expenseSummary.getUnsettledAmount()))
-                                .pendingSettlements(0) // TODO: Implement when SettlementService is available
-                                .completedSettlements(0) // TODO: Implement when SettlementService is available
+                                .nexId(analytics.getNexId())
+                                .nexName(analytics.getNexName())
+                                .creatorName(analytics.getCreatorName())
                                 .build();
         }
 }

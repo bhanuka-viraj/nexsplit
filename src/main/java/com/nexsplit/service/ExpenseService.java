@@ -4,7 +4,7 @@ import com.nexsplit.dto.PaginatedResponse;
 import com.nexsplit.dto.expense.CreateExpenseRequest;
 import com.nexsplit.dto.expense.ExpenseDto;
 import com.nexsplit.dto.expense.ExpenseFilter;
-import com.nexsplit.dto.expense.ExpenseSummaryDto;
+import com.nexsplit.model.view.ExpenseSummaryView;
 import com.nexsplit.dto.expense.UpdateExpenseRequest;
 
 /**
@@ -91,7 +91,7 @@ public interface ExpenseService {
      * @param userId The ID of the user requesting the summary
      * @return Expense summary DTO
      */
-    ExpenseSummaryDto getExpenseSummary(String nexId, String userId);
+    ExpenseSummaryView getExpenseSummary(String nexId, String userId);
 
     /**
      * Search expenses by title or description.

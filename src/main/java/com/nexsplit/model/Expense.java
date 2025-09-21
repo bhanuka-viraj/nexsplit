@@ -6,7 +6,6 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.experimental.SuperBuilder;
-import org.hibernate.annotations.GenericGenerator;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -88,8 +87,12 @@ public class Expense extends BaseEntity {
 
     @PrePersist
     protected void onCreate() {
+        // Ensure BaseEntity default values are set
+        ensureDefaultValues();
+
+        // Set Expense-specific default values
         if (currency == null) {
-            currency = "USD";
+            currency = "USD"; // TODO: Use CurrencyUtil.getDefaultCurrency() when Spring context is available
         }
         if (splitType == null) {
             splitType = SplitType.EQUALLY;

@@ -1,17 +1,24 @@
 package com.nexsplit.controller;
 
+import com.nexsplit.dto.ApiResponse;
 import com.nexsplit.dto.auth.AuthResponse;
 import com.nexsplit.dto.auth.LoginRequest;
 import com.nexsplit.dto.auth.OAuth2TokenRequest;
+import com.nexsplit.dto.auth.PasswordResetDto;
+import com.nexsplit.dto.auth.PasswordResetRequestDto;
 import com.nexsplit.dto.auth.RefreshTokenRequest;
 import com.nexsplit.dto.auth.RefreshTokenResponse;
 import com.nexsplit.dto.user.UserDto;
+import com.nexsplit.dto.response.RegistrationResponse;
+import com.nexsplit.dto.response.PasswordResetResponse;
+import com.nexsplit.exception.BusinessException;
 import com.nexsplit.exception.SecurityException;
 import com.nexsplit.exception.UserNotFoundException;
 import com.nexsplit.model.User;
 import com.nexsplit.service.AuditService;
 import com.nexsplit.service.EmailService;
 import com.nexsplit.service.OAuth2Service;
+import com.nexsplit.service.UserService;
 import com.nexsplit.service.impl.RefreshTokenServiceImpl;
 import com.nexsplit.service.impl.UserServiceImpl;
 import com.nexsplit.config.ApiConfig;
@@ -20,7 +27,6 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -30,8 +36,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.web.bind.annotation.*;
 import com.nexsplit.util.LoggingUtil;
 import com.nexsplit.util.StructuredLoggingUtil;
@@ -40,7 +44,6 @@ import lombok.extern.slf4j.Slf4j;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping(ApiConfig.API_BASE_PATH + "/auth")
@@ -48,17 +51,17 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class AuthController {
 
-        private final UserServiceImpl userServiceImpl;
+        private final UserService userService;
         private final RefreshTokenServiceImpl refreshTokenServiceImpl;
         private final JwtUtil jwtUtil;
         private final AuditService auditService;
         private final OAuth2Service oauth2Service;
         private final EmailService emailService;
 
-        public AuthController(UserServiceImpl userServiceImpl, RefreshTokenServiceImpl refreshTokenServiceImpl,
+        public AuthController(UserServiceImpl userService, RefreshTokenServiceImpl refreshTokenServiceImpl,
                         JwtUtil jwtUtil, AuditService auditService, OAuth2Service oauth2Service,
                         EmailService emailService) {
-                this.userServiceImpl = userServiceImpl;
+                this.userService = userService;
                 this.refreshTokenServiceImpl = refreshTokenServiceImpl;
                 this.jwtUtil = jwtUtil;
                 this.auditService = auditService;
@@ -72,9 +75,9 @@ public class AuthController {
                           "googleToken": "ya29.a0AfB_byC..."
                         }
                         """))), responses = {
-                        @ApiResponse(responseCode = "200", description = "OAuth2 token verification successful", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AuthResponse.class))),
-                        @ApiResponse(responseCode = "400", description = "Invalid request data"),
-                        @ApiResponse(responseCode = "401", description = "Invalid Google OAuth2 token")
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "OAuth2 token verification successful", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AuthResponse.class))),
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid request data"),
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Invalid Google OAuth2 token")
         })
         public ResponseEntity<AuthResponse> verifyOAuth2Token(@Valid @RequestBody OAuth2TokenRequest request,
                         HttpServletRequest httpRequest, HttpServletResponse response) {
@@ -121,12 +124,12 @@ public class AuthController {
                           "contactNumber": "+1234567890"
                         }
                         """))), responses = {
-                        @ApiResponse(responseCode = "200", description = "User registered successfully. Check email for verification code."),
-                        @ApiResponse(responseCode = "400", description = "Invalid input data or user already exists")
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "User registered successfully. Check email for verification code."),
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid input data or user already exists")
         })
-        public ResponseEntity<Map<String, Object>> register(@Valid @RequestBody UserDto userDto,
+        public ResponseEntity<ApiResponse<RegistrationResponse>> register(@Valid @RequestBody UserDto userDto,
                         HttpServletRequest request) {
-                User user = userServiceImpl.registerUser(userDto);
+                User user = userService.registerUser(userDto);
 
                 // Get client information for security tracking
                 String ipAddress = getClientIpAddress(request);
@@ -152,14 +155,15 @@ public class AuthController {
                 log.info("User registered successfully: {} - Email verification required",
                                 LoggingUtil.maskEmail(user.getEmail()));
 
-                return ResponseEntity.ok(Map.of(
-                                "success", true,
-                                "message", "Registration successful! Please check your email for verification code.",
-                                "data", Map.of(
-                                                "email", user.getEmail(),
-                                                "username", user.getUsername(),
-                                                "emailVerified", false,
-                                                "nextStep", "Verify your email to complete registration")));
+                RegistrationResponse response = RegistrationResponse.builder()
+                                .email(user.getEmail())
+                                .username(user.getUsername())
+                                .emailVerified(false)
+                                .nextStep("Verify your email to complete registration")
+                                .build();
+
+                return ResponseEntity.ok(ApiResponse.success(response,
+                                "Registration successful! Please check your email for verification code."));
         }
 
         @PostMapping("/login")
@@ -169,18 +173,18 @@ public class AuthController {
                           "password": "StrongPass123!"
                         }
                         """))), responses = {
-                        @ApiResponse(responseCode = "200", description = "Login successful", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AuthResponse.class))),
-                        @ApiResponse(responseCode = "401", description = "Invalid credentials")
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Login successful", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AuthResponse.class))),
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Invalid credentials")
         })
         public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest loginRequest,
                         HttpServletRequest request, HttpServletResponse response) {
                 String email = loginRequest.getEmail();
                 String password = loginRequest.getPassword();
 
-                String accessToken = userServiceImpl.loginUser(email, password);
+                String accessToken = userService.loginUser(email, password);
 
                 // Get user ID for refresh token generation
-                UserDto user = userServiceImpl.getUserByEmail(email);
+                UserDto user = userService.getUserByEmail(email);
 
                 // Get client information for security tracking
                 String ipAddress = getClientIpAddress(request);
@@ -234,9 +238,9 @@ public class AuthController {
 
         @PostMapping("/refresh")
         @Operation(summary = "Refresh Access Token (Cookie)", description = "Refresh an expired access token using a valid refresh token from cookies. This endpoint does not require authentication.", responses = {
-                        @ApiResponse(responseCode = "200", description = "Token refreshed successfully", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AuthResponse.class))),
-                        @ApiResponse(responseCode = "401", description = "Invalid or expired refresh token"),
-                        @ApiResponse(responseCode = "400", description = "Refresh token not found in cookies")
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Token refreshed successfully", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AuthResponse.class))),
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Invalid or expired refresh token"),
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Refresh token not found in cookies")
         })
         public ResponseEntity<AuthResponse> refreshToken(
                         @CookieValue(value = "refreshToken", required = false) String refreshToken,
@@ -304,9 +308,9 @@ public class AuthController {
                           "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
                         }
                         """))), responses = {
-                        @ApiResponse(responseCode = "200", description = "Token refreshed successfully", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AuthResponse.class))),
-                        @ApiResponse(responseCode = "401", description = "Invalid or expired refresh token"),
-                        @ApiResponse(responseCode = "400", description = "Invalid request body")
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Token refreshed successfully", content = @Content(mediaType = "application/json", schema = @Schema(implementation = AuthResponse.class))),
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Invalid or expired refresh token"),
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid request body")
         })
         public ResponseEntity<AuthResponse> refreshTokenBody(@Valid @RequestBody RefreshTokenRequest request,
                         HttpServletRequest httpRequest) {
@@ -380,12 +384,12 @@ public class AuthController {
 
         @PostMapping("/logout")
         @Operation(summary = "User Logout", description = "Logout user and revoke all refresh tokens. Requires authentication via Bearer token.", security = @SecurityRequirement(name = "bearerAuth"), responses = {
-                        @ApiResponse(responseCode = "200", description = "Logout successful", content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Successful Logout", value = """
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Logout successful", content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Successful Logout", value = """
                                         {
                                           "message": "Logged out successfully"
                                         }
                                         """))),
-                        @ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing token")
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthorized - Invalid or missing token")
         })
         /**
          * User logout with comprehensive token revocation
@@ -422,7 +426,7 @@ public class AuthController {
          * @param response The HTTP response for cookie cleanup
          * @return ResponseEntity with logout confirmation
          */
-        public ResponseEntity<Map<String, Object>> logout(HttpServletRequest request, HttpServletResponse response) {
+        public ResponseEntity<ApiResponse<String>> logout(HttpServletRequest request, HttpServletResponse response) {
                 String userEmail = "unknown";
 
                 // Get user ID from access token in Authorization header
@@ -432,7 +436,7 @@ public class AuthController {
                                 accessToken = accessToken.substring(7);
                                 // Extract user email from access token
                                 userEmail = jwtUtil.getEmailFromToken(accessToken);
-                                UserDto user = userServiceImpl.getUserByEmail(userEmail);
+                                UserDto user = userService.getUserByEmail(userEmail);
                                 // Revoke all refresh tokens for the user
                                 refreshTokenServiceImpl.revokeAllUserTokens(user.getId());
                                 // Log business event for Elasticsearch
@@ -473,57 +477,52 @@ public class AuthController {
                 response.setHeader(HttpHeaders.SET_COOKIE, clearCookie.toString());
 
                 log.info("User logged out successfully: {}", LoggingUtil.maskEmail(userEmail));
-                return ResponseEntity.ok(Map.of("message", "Logged out successfully"));
+                return ResponseEntity.ok(ApiResponse.success("Logged out successfully"));
         }
 
         @PostMapping("/verify-email")
-        @Operation(summary = "Verify Email (Mobile App)", description = "Verify email address using verification code. Designed for mobile app integration.", requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "Email verification data", required = true, content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Verify Email", value = """
+        @Operation(summary = "Verify Email", description = "Verify email address using verification code. Designed for mobile app integration.", requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "Email verification data", required = true, content = @Content(mediaType = "application/json", examples = @ExampleObject(name = "Verify Email", value = """
                         {
                           "email": "user@example.com",
                           "code": "123456"
                         }
                         """))), responses = {
-                        @ApiResponse(responseCode = "200", description = "Email verified successfully"),
-                        @ApiResponse(responseCode = "400", description = "Invalid or expired verification code"),
-                        @ApiResponse(responseCode = "404", description = "User not found")
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Email verified successfully"),
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid or expired verification code"),
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found")
         })
-        public ResponseEntity<Map<String, Object>> verifyEmailMobile(@RequestBody Map<String, String> request,
+        public ResponseEntity<ApiResponse<Map<String, Object>>> verifyEmailMobile(
+                        @RequestBody Map<String, String> request,
                         HttpServletRequest httpRequest, HttpServletResponse response) {
                 try {
                         String email = request.get("email");
                         String code = request.get("code");
 
                         if (email == null || email.trim().isEmpty()) {
-                                return ResponseEntity.badRequest().body(Map.of(
-                                                "success", false,
-                                                "message", "Email is required",
-                                                "error", "MISSING_EMAIL"));
+                                return ResponseEntity.badRequest()
+                                                .body(ApiResponse.error("Email is required"));
                         }
 
                         if (code == null || code.trim().isEmpty()) {
-                                return ResponseEntity.badRequest().body(Map.of(
-                                                "success", false,
-                                                "message", "Verification code is required",
-                                                "error", "MISSING_CODE"));
+                                return ResponseEntity.badRequest().body(ApiResponse
+                                                .error("Verification code is required"));
                         }
 
                         log.info("Mobile email verification request received for: {} with code: {}",
                                         LoggingUtil.maskEmail(email), LoggingUtil.maskSensitiveData(code));
 
                         // Find user by email first
-                        User user = userServiceImpl.getUserByEmailForVerification(email);
+                        User user = userService.getUserByEmailForVerification(email);
 
                         // Confirm email using the code
-                        User confirmedUser = userServiceImpl.confirmEmail(code, user);
+                        User confirmedUser = userService.confirmEmail(code, user);
 
                         // Verify that the confirmed user matches the requested email
                         if (!confirmedUser.getEmail().equals(email)) {
                                 log.warn("Email verification failed - code mismatch for: {}",
                                                 LoggingUtil.maskEmail(email));
-                                return ResponseEntity.badRequest().body(Map.of(
-                                                "success", false,
-                                                "message", "Invalid verification code for this email",
-                                                "error", "CODE_MISMATCH"));
+                                return ResponseEntity.badRequest().body(ApiResponse.error(
+                                                "Invalid verification code for this email"));
                         }
 
                         // Log successful email confirmation
@@ -538,17 +537,17 @@ public class AuthController {
                                                         "username", confirmedUser.getUsername(),
                                                         "thread", Thread.currentThread().getName()));
 
-                        // Log audit event asynchronously
-                        auditService.logSecurityEventAsync(
-                                        confirmedUser.getId(),
-                                        "EMAIL_VERIFIED_MOBILE",
-                                        "Email verified via mobile app");
+//                        // Log audit event asynchronously
+//                        auditService.logSecurityEventAsync(
+//                                        confirmedUser.getId(),
+//                                        "EMAIL_VERIFIED_MOBILE",
+//                                        "Email verified via mobile app");
 
                         log.info("Email verified successfully via mobile app for user: {}",
                                         LoggingUtil.maskEmail(confirmedUser.getEmail()));
 
                         // Generate tokens after successful email verification
-                        String accessToken = userServiceImpl.generateAccessToken(confirmedUser);
+                        String accessToken = userService.generateAccessToken(confirmedUser);
                         String refreshToken = refreshTokenServiceImpl.generateRefreshToken(
                                         confirmedUser.getId(),
                                         httpRequest.getHeader("User-Agent"));
@@ -564,33 +563,31 @@ public class AuthController {
 
                         response.setHeader(HttpHeaders.SET_COOKIE, refreshCookie.toString());
 
-                        return ResponseEntity.ok(Map.of(
-                                        "success", true,
-                                        "message", "Email verified successfully! You can now login.",
-                                        "data", Map.of(
+                        return ResponseEntity.ok(ApiResponse.success(
+                                        Map.of(
                                                         "email", confirmedUser.getEmail(),
                                                         "username", confirmedUser.getUsername(),
                                                         "verified", true,
                                                         "accessToken", accessToken,
                                                         "refreshToken", refreshToken,
                                                         "tokenType", "Bearer",
-                                                        "expiresIn", 900L)));
+                                                        "expiresIn", 900L),
+                                        "Email verified successfully! You can now login."));
 
                 } catch (UserNotFoundException e) {
                         log.warn("Mobile email verification failed - user not found: {}", e.getMessage());
                         return ResponseEntity.notFound().build();
                 } catch (IllegalArgumentException e) {
                         log.warn("Mobile email verification failed - validation error: {}", e.getMessage());
-                        return ResponseEntity.badRequest().body(Map.of(
-                                        "success", false,
-                                        "message", e.getMessage(),
-                                        "error", "VALIDATION_ERROR"));
+                        return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+
+                } catch (BusinessException e) {
+                        log.warn("Mobile email verification failed - invalid code: {}", e.getMessage());
+                        return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
                 } catch (Exception e) {
                         log.error("Mobile email verification failed - unexpected error: {}", e.getMessage(), e);
-                        return ResponseEntity.internalServerError().body(Map.of(
-                                        "success", false,
-                                        "message", "An unexpected error occurred",
-                                        "error", "INTERNAL_ERROR"));
+                        return ResponseEntity.internalServerError()
+                                        .body(ApiResponse.error("An unexpected error occurred"));
                 }
         }
 
@@ -600,9 +597,9 @@ public class AuthController {
                           "email": "john.doe@example.com"
                         }
                         """))), responses = {
-                        @ApiResponse(responseCode = "200", description = "Email verification resent successfully"),
-                        @ApiResponse(responseCode = "400", description = "Invalid email or email already verified"),
-                        @ApiResponse(responseCode = "404", description = "User not found")
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Email verification resent successfully"),
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid email or email already verified"),
+                        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found")
         })
         public ResponseEntity<Map<String, Object>> resendEmailVerification(@RequestBody Map<String, String> request,
                         HttpServletRequest httpRequest) {
@@ -618,7 +615,7 @@ public class AuthController {
                         log.info("Email verification resend request received for: {}", LoggingUtil.maskEmail(email));
 
                         // Resend email verification
-                        userServiceImpl.resendEmailVerification(email);
+                        userService.resendEmailVerification(email);
 
                         // Log security event
                         StructuredLoggingUtil.logSecurityEvent(
@@ -720,68 +717,44 @@ public class AuthController {
                 return request.getRemoteAddr();
         }
 
-        @PostMapping("/test-email")
-        @Operation(summary = "Test Email Configuration", description = "Send a test email to verify email configuration is working correctly", requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "Test email request", required = true, content = @Content(mediaType = "application/json", schema = @Schema(implementation = Map.class), examples = @ExampleObject(name = "Test Email", value = """
-                        {
-                          "email": "test@example.com"
-                        }
-                        """))), responses = {
-                        @ApiResponse(responseCode = "200", description = "Test email sent successfully"),
-                        @ApiResponse(responseCode = "400", description = "Invalid email address"),
-                        @ApiResponse(responseCode = "500", description = "Email sending failed")
-        })
-        public ResponseEntity<Map<String, Object>> testEmail(@RequestBody Map<String, String> request,
-                        HttpServletRequest httpRequest) {
+        @PostMapping("/request-password-reset")
+        @Operation(summary = "Request Password Reset", description = "Request a password reset link to be sent to the user's email")
+        public ResponseEntity<ApiResponse<PasswordResetResponse>> requestPasswordReset(
+                        @Valid @RequestBody PasswordResetRequestDto requestDto) {
                 try {
-                        String email = request.get("email");
-                        if (email == null || email.trim().isEmpty()) {
-                                return ResponseEntity.badRequest().body(Map.of(
-                                                "success", false,
-                                                "message", "Email address is required"));
-                        }
-
-                        // Validate email format
-                        String emailRegex = "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$";
-                        if (!email.matches(emailRegex)) {
-                                return ResponseEntity.badRequest().body(Map.of(
-                                                "success", false,
-                                                "message",
-                                                "Invalid email format. Please provide a valid email address."));
-                        }
-
-                        // Send simple test email
-                        CompletableFuture<Void> emailFuture = emailService.sendSimpleEmail(email,
-                                        "Test Email from AuthController",
-                                        "This is a test email from the AuthController to verify email functionality is working correctly.");
-
-                        // Wait for the email to be sent
-                        try {
-                                emailFuture.get(); // Wait for the async operation to complete
-                        } catch (Exception e) {
-                                log.error("Email sending failed: {}", e.getMessage(), e);
-                                throw new RuntimeException("Failed to send test email", e);
-                        }
-
-                        // Log the test email attempt as a system event
-                        auditService.logSystemEventAsync(
-                                        "EMAIL_TEST_SENT",
-                                        "Test email sent to " + LoggingUtil.maskEmail(email) + " from "
-                                                        + getClientIpAddress(httpRequest));
-
-                        log.info("Test email sent successfully to: {}", LoggingUtil.maskEmail(email));
-
-                        return ResponseEntity.ok(Map.of(
-                                        "success", true,
-                                        "message", "Test email sent successfully",
-                                        "data", Map.of(
-                                                        "email", LoggingUtil.maskEmail(email))));
-
+                        userService.requestPasswordReset(requestDto.getEmail());
+                        PasswordResetResponse response = PasswordResetResponse.builder()
+                                        .email(requestDto.getEmail())
+                                        .message("Password reset link has been sent to " + requestDto.getEmail())
+                                        .emailSent(true)
+                                        .build();
+                        return ResponseEntity.ok(ApiResponse.success(response, "Password reset link has been sent"));
                 } catch (Exception e) {
-                        log.error("Test email failed: {}", e.getMessage(), e);
-                        return ResponseEntity.internalServerError().body(Map.of(
-                                        "success", false,
-                                        "message", "Failed to send test email: " + e.getMessage(),
-                                        "error", "EMAIL_SEND_FAILED"));
+                        PasswordResetResponse response = PasswordResetResponse.builder()
+                                        .email(requestDto.getEmail())
+                                        .message("If the email exists, a reset link has been sent")
+                                        .emailSent(true)
+                                        .build();
+                        return ResponseEntity.ok(ApiResponse.success(response, "Password reset request processed"));
+                }
+        }
+
+        @PostMapping("/reset-password")
+        @Operation(summary = "Reset Password", description = "Reset user password using the reset token")
+        public ResponseEntity<ApiResponse<Void>> resetPassword(
+                        @Valid @RequestBody PasswordResetDto resetDto) {
+
+                if (!resetDto.getNewPassword().equals(resetDto.getConfirmPassword())) {
+                        return ResponseEntity.badRequest()
+                                        .body(ApiResponse.error("New password and confirm password do not match"));
+                }
+
+                try {
+                        userService.resetPassword(resetDto.getResetToken(), resetDto.getNewPassword());
+                        return ResponseEntity.ok(ApiResponse.success("Password reset successfully"));
+                } catch (Exception e) {
+                        return ResponseEntity.badRequest()
+                                        .body(ApiResponse.error("Invalid reset token or password"));
                 }
         }
 

@@ -14,7 +14,11 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class NexMemberDto {
 
+    private String nexId;
     private String userId;
+    private String userName;
+    private String userEmail;
+    private String nexName;
     private String username;
     private String firstName;
     private String lastName;

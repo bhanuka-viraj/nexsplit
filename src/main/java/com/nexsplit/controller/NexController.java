@@ -15,6 +15,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -60,8 +62,8 @@ public class NexController {
         @GetMapping
         @Operation(summary = "List User's Active Expense Groups", security = @SecurityRequirement(name = "bearerAuth"))
         public ResponseEntity<ApiResponse<PaginatedResponse<NexDto>>> getUserNexes(
-                        @RequestParam(defaultValue = "0") int page,
-                        @RequestParam(defaultValue = "10") int size,
+                        @RequestParam(defaultValue = "0") @Min(0) int page,
+                        @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size,
                         @AuthenticationPrincipal UserDetails userDetails) {
 
                 String userId = userDetails.getUsername();
@@ -144,8 +146,8 @@ public class NexController {
         @Operation(summary = "Get Expense Group Categories", description = "Get paginated categories for a specific expense group", security = @SecurityRequirement(name = "bearerAuth"))
         public ResponseEntity<ApiResponse<PaginatedResponse<CategorySummaryDto>>> getNexCategories(
                         @PathVariable String nexId,
-                        @RequestParam(defaultValue = "0") int page,
-                        @RequestParam(defaultValue = "10") int size,
+                        @RequestParam(defaultValue = "0") @Min(0) int page,
+                        @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size,
                         @AuthenticationPrincipal UserDetails userDetails) {
 
                 String userId = userDetails.getUsername();

@@ -35,6 +35,17 @@ public abstract class BaseEntity {
     private Boolean isDeleted = false;
 
     /**
+     * Ensure isDeleted is set before persisting
+     * Note: This method should be called from @PrePersist methods in concrete
+     * entities
+     */
+    protected void ensureDefaultValues() {
+        if (isDeleted == null) {
+            isDeleted = false;
+        }
+    }
+
+    /**
      * Soft delete the entity
      */
     public void softDelete(String deletedBy) {

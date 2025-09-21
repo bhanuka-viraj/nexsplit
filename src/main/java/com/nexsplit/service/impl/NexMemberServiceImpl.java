@@ -8,8 +8,8 @@ import com.nexsplit.dto.nex.NexMemberDto;
 import com.nexsplit.dto.nex.UpdateMemberRoleRequest;
 import com.nexsplit.exception.BusinessException;
 import com.nexsplit.exception.EntityNotFoundException;
-import com.nexsplit.mapper.nex.InvitationMapper;
-import com.nexsplit.mapper.nex.NexMemberMapper;
+import com.nexsplit.mapper.nex.NexMemberMapStruct;
+import com.nexsplit.mapper.nex.InvitationMapStruct;
 import com.nexsplit.model.Nex;
 import com.nexsplit.model.NexMember;
 import com.nexsplit.model.NexMemberId;
@@ -17,6 +17,7 @@ import com.nexsplit.model.User;
 import com.nexsplit.repository.NexMemberRepository;
 import com.nexsplit.repository.NexRepository;
 import com.nexsplit.repository.UserRepository;
+import com.nexsplit.service.EventService;
 import com.nexsplit.service.NexMemberService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,8 +41,9 @@ public class NexMemberServiceImpl implements NexMemberService {
     private final NexMemberRepository nexMemberRepository;
     private final NexRepository nexRepository;
     private final UserRepository userRepository;
-    private final NexMemberMapper nexMemberMapper;
-    private final InvitationMapper invitationMapper;
+    private final NexMemberMapStruct nexMemberMapStruct;
+    private final InvitationMapStruct invitationMapStruct;
+    private final EventService eventService;
 
     @Override
     @Transactional
@@ -86,6 +88,9 @@ public class NexMemberServiceImpl implements NexMemberService {
 
         nexMemberRepository.save(member);
 
+        // Broadcast invitation sent event
+        eventService.broadcastInvitationSent(nexId, userToInvite.getId(), inviterId);
+
         log.info("Member invited successfully: {} to nex: {}", userToInvite.getId(), nexId);
     }
 
@@ -106,6 +111,9 @@ public class NexMemberServiceImpl implements NexMemberService {
         member.setJoinedAt(LocalDateTime.now());
         nexMemberRepository.save(member);
 
+        // Broadcast invitation accepted event
+        eventService.broadcastInvitationAccepted(nexId, userId);
+
         log.info("Invitation accepted successfully for user: {} to nex: {}", userId, nexId);
     }
 
@@ -123,6 +131,9 @@ public class NexMemberServiceImpl implements NexMemberService {
         }
 
         nexMemberRepository.delete(member);
+
+        // Broadcast invitation declined event
+        eventService.broadcastInvitationDeclined(nexId, userId);
 
         log.info("Invitation declined successfully for user: {} to nex: {}", userId, nexId);
     }
@@ -214,7 +225,7 @@ public class NexMemberServiceImpl implements NexMemberService {
         Page<NexMember> memberPage = nexMemberRepository.findAllMembersByNexIdPaginated(nexId, pageable);
 
         List<NexMemberDto> memberDtos = memberPage.getContent().stream()
-                .map(nexMemberMapper::toDto)
+                .map(nexMemberMapStruct::toDto)
                 .collect(Collectors.toList());
 
         return PaginatedResponse.<NexMemberDto>builder()
@@ -239,7 +250,7 @@ public class NexMemberServiceImpl implements NexMemberService {
         Page<NexMember> invitationPage = nexMemberRepository.findPendingInvitationsByUserIdPaginated(userId, pageable);
 
         List<InvitationDto> invitationDtos = invitationPage.getContent().stream()
-                .map(invitationMapper::toInvitationDto)
+                .map(invitationMapStruct::toDto)
                 .collect(Collectors.toList());
 
         return PaginatedResponse.<InvitationDto>builder()
@@ -264,7 +275,7 @@ public class NexMemberServiceImpl implements NexMemberService {
         Page<NexMember> membershipPage = nexMemberRepository.findActiveMembershipsByUserIdPaginated(userId, pageable);
 
         List<NexMemberDto> membershipDtos = membershipPage.getContent().stream()
-                .map(nexMemberMapper::toDto)
+                .map(nexMemberMapStruct::toDto)
                 .collect(Collectors.toList());
 
         return PaginatedResponse.<NexMemberDto>builder()

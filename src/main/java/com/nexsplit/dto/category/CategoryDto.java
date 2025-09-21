@@ -25,6 +25,6 @@ public class CategoryDto {
     private String creatorName;
     private String creatorUsername;
     private String nexName;
-    private Integer expenseCount;
-    private Long totalExpenseAmount;
+    private Long expenseCount;
+    private java.math.BigDecimal totalExpenseAmount;
 }

@@ -9,6 +9,8 @@ import com.nexsplit.util.StructuredLoggingUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -30,8 +32,8 @@ public class UserInvitationController {
     @GetMapping("/pending")
     @Operation(summary = "Get Pending Invitations", security = @SecurityRequirement(name = "bearerAuth"))
     public ResponseEntity<ApiResponse<PaginatedResponse<InvitationDto>>> getPendingInvitations(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "10") @Min(1) @Max(100) int size,
             @AuthenticationPrincipal UserDetails userDetails) {
 
         String userId = userDetails.getUsername();

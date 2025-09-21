@@ -24,7 +24,6 @@ public class ApiConfig {
         @Value("${CORS_ALLOWED_HEADERS:${cors.allowed-headers:Authorization,Origin,Content-Type,Accept,X-Requested-With}}")
         private List<String> allowedHeadersList;
 
-        // Convert List to array for backward compatibility
         public List<String> getAllowedOrigins() {
                 return allowedOriginsList;
         }

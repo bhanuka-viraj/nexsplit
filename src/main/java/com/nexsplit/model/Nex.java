@@ -64,6 +64,9 @@ public class Nex extends BaseEntity {
     @OneToMany(mappedBy = "nex", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Bill> bills;
 
+    @OneToMany(mappedBy = "nex", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<Notification> notifications;
+
     public enum SettlementType {
         DETAILED, SIMPLIFIED
     }

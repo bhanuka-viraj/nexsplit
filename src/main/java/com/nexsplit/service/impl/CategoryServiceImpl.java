@@ -8,7 +8,7 @@ import com.nexsplit.dto.PaginatedResponse;
 import com.nexsplit.exception.BusinessException;
 import com.nexsplit.exception.EntityNotFoundException;
 import com.nexsplit.dto.ErrorCode;
-import com.nexsplit.mapper.category.CategoryMapper;
+import com.nexsplit.mapper.category.CategoryMapStruct;
 import com.nexsplit.model.Category;
 import com.nexsplit.repository.CategoryRepository;
 import com.nexsplit.service.CategoryService;
@@ -32,7 +32,7 @@ import java.util.stream.Collectors;
 public class CategoryServiceImpl implements CategoryService {
 
     private final CategoryRepository categoryRepository;
-    private final CategoryMapper categoryMapper;
+    private final CategoryMapStruct categoryMapStruct;
     private final NexService nexService;
 
     @Override
@@ -59,7 +59,7 @@ public class CategoryServiceImpl implements CategoryService {
         }
 
         // Create category entity
-        Category category = categoryMapper.toEntity(request);
+        Category category = categoryMapStruct.toEntity(request);
         category.setCreatedBy(userId);
 
         // Save category
@@ -67,7 +67,7 @@ public class CategoryServiceImpl implements CategoryService {
 
         log.info("Category created successfully: {}", savedCategory.getId());
 
-        return categoryMapper.toDto(savedCategory);
+        return categoryMapStruct.toDto(savedCategory);
     }
 
     @Override
@@ -84,7 +84,7 @@ public class CategoryServiceImpl implements CategoryService {
         Page<Category> categoryPage = categoryRepository.findByNexIdPaginated(nexId, pageable);
 
         List<CategorySummaryDto> categoryDtos = categoryPage.getContent().stream()
-                .map(categoryMapper::toSummaryDto)
+                .map(categoryMapStruct::toSummaryDto)
                 .collect(Collectors.toList());
 
         return PaginatedResponse.<CategorySummaryDto>builder()
@@ -109,7 +109,7 @@ public class CategoryServiceImpl implements CategoryService {
         Page<Category> categoryPage = categoryRepository.findPersonalCategoriesByUserIdPaginated(userId, pageable);
 
         List<CategorySummaryDto> categoryDtos = categoryPage.getContent().stream()
-                .map(categoryMapper::toSummaryDto)
+                .map(categoryMapStruct::toSummaryDto)
                 .collect(Collectors.toList());
 
         return PaginatedResponse.<CategorySummaryDto>builder()
@@ -134,7 +134,7 @@ public class CategoryServiceImpl implements CategoryService {
         Page<Category> categoryPage = categoryRepository.findDefaultCategoriesPaginated(pageable);
 
         List<CategorySummaryDto> categoryDtos = categoryPage.getContent().stream()
-                .map(categoryMapper::toSummaryDto)
+                .map(categoryMapStruct::toSummaryDto)
                 .collect(Collectors.toList());
 
         return PaginatedResponse.<CategorySummaryDto>builder()
@@ -163,7 +163,7 @@ public class CategoryServiceImpl implements CategoryService {
             throw new BusinessException("Access denied", ErrorCode.AUTHZ_CATEGORY_ACCESS_DENIED);
         }
 
-        return categoryMapper.toDto(category);
+        return categoryMapStruct.toDto(category);
     }
 
     @Override
@@ -200,12 +200,12 @@ public class CategoryServiceImpl implements CategoryService {
         }
 
         // Update category
-        categoryMapper.updateEntityFromRequest(request, category);
+        categoryMapStruct.updateEntityFromRequest(request, category);
         Category updatedCategory = categoryRepository.save(category);
 
         log.info("Category updated successfully: {}", categoryId);
 
-        return categoryMapper.toDto(updatedCategory);
+        return categoryMapStruct.toDto(updatedCategory);
     }
 
     @Override

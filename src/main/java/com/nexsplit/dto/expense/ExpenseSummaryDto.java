@@ -29,28 +29,4 @@ public class ExpenseSummaryDto {
     private LocalDateTime createdAt;
     private LocalDateTime modifiedAt;
 
-    /**
-     * Number of people this expense is split among.
-     */
-    private Integer splitCount;
-
-    /**
-     * Whether the expense has been fully settled.
-     */
-    private Boolean isFullySettled;
-
-    /**
-     * Total amount of unsettled debts for this expense.
-     */
-    private BigDecimal unsettledAmount;
-
-    /**
-     * Total number of expenses (for nex-level summary).
-     */
-    private Integer totalExpenses;
-
-    /**
-     * Total expense amount (for nex-level summary).
-     */
-    private BigDecimal totalExpenseAmount;
 }
